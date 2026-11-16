@@ -57,8 +57,14 @@ jobs:
       - name: Start stack
         run: |
           docker compose up -d
-          # one-shot migrate service: block until it exits (non-zero fails the job)
-          docker compose wait migrate
+          # one-shot migrate service must exit 0 before the API is allowed to run
+          for i in $(seq 1 30); do
+            line=$(docker compose ps -a --format '{{.Service}} {{.ExitCode}}' | grep '^migrate ' || true)
+            if [ "$line" = "migrate 0" ]; then echo "migrations completed"; exit 0; fi
+            sleep 2
+          done
+          docker compose logs migrate
+          exit 1
 
       - name: Migrations ran once in the dedicated service
         run: |

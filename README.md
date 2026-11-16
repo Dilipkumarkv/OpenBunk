@@ -62,7 +62,7 @@ Dependencies are pinned to exact versions in `package.json`; `package-lock.json`
 
 ```bash
 docker compose up -d                   # db → one-shot migrate → api → web
-docker compose wait migrate            # exits non-zero if migrations failed
+docker compose ps -a --format '{{.Service}} {{.ExitCode}}'   # migrate should show "0"
 docker compose exec api python -m app.seed   # demo station OB-001 (skip in production)
 # open http://localhost:8080  → sign in with EMP-00 / the PIN in OPENBUNK_SEED_PIN (dev only)
 ```

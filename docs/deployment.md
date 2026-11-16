@@ -59,7 +59,7 @@ OPENBUNK_SEED_PIN=                        # EMPTY in real deployments — no dem
 EOF
 docker compose --env-file .env build
 docker compose --env-file .env up -d
-docker compose --env-file .env wait migrate   # one-shot migrations; non-zero = failure
+docker compose --env-file .env ps -a --format '{{.Service}} {{.ExitCode}}'   # migrate = 0
 docker compose --env-file .env ps         # api/web healthy, migrate exited 0
 caddy reverse-proxy --from staging.example.com --to localhost:8080   # or a Caddyfile / traefik
 ```
@@ -82,10 +82,10 @@ boot**, sign in once as owner, create your own owner user (`/api/v1/employees`),
 1. `git fetch && git checkout <release-ref>`
 2. **`docker compose run --rm migrate python -m app.backup create /data/pre-<ref>.dump`**
    (native `pg_dump -Fc` dump + SHA-256 manifest; see §6)
-3. `docker compose build && docker compose up -d && docker compose wait migrate`
-   (runs `migrate`, then API, then web)
+3. `docker compose build && docker compose up -d` then confirm `docker compose ps -a` shows
+   `migrate` exited 0 (runs `migrate`, then API, then web)
 4. Verify: `curl https://<host>/api/v1/readiness` = ready; spot-check `/api/v1/reports/daily-sales?date=<today>`.
-5. Rollback: `git checkout <previous-ref> && docker compose build && docker compose up -d && docker compose wait migrate`.
+5. Rollback: `git checkout <previous-ref> && docker compose build && docker compose up -d` (confirm `migrate` exits 0).
    App rollback is safe because released schema is additive-only; if a destructive migration was ever
    applied, restore from the §6 backup instead (see §7).
 

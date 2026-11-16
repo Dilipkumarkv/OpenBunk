@@ -105,7 +105,9 @@ def _row_counts(engine) -> dict[str, int]:
 
 def create_backup(engine, path: Path) -> dict:
     path = Path(path)
-    url = str(engine.url)
+    # render_as_string keeps the password: str(URL) masks it with *** and libpq
+    # then cannot authenticate for pg_dump.
+    url = engine.url.render_as_string(hide_password=False)
     is_postgres = url.startswith("postgresql")
     _atomic_write_bytes(
         path,
@@ -206,7 +208,7 @@ def restore_backup(engine, path: Path, *, force: bool = False, allow_revision_mi
     create_backup(engine, pre)
     print(f"Pre-restore snapshot: {pre} (+ {pre}.manifest.json)")
 
-    url = str(engine.url)
+    url = engine.url.render_as_string(hide_password=False)
     if url.startswith("postgresql"):
         archive = path.with_name(f"{path.name}.audit-{stamp}.jsonl")
         _archive_audit(engine, archive)
