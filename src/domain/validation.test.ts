@@ -30,6 +30,23 @@ describe('validateShiftReadings', () => {
     expect(issues[0].field).toBe('petrolClosing')
   })
 
+  it('accepts closing below opening when rollover is authorized with a valid rollover value', () => {
+    const issues = validateShiftReadings(
+      { ...VALID, petrolOpening: '99990', petrolClosing: '20' },
+      { petrol: true, petrolRolloverValue: 100000 },
+    )
+    expect(issues).toEqual([])
+  })
+
+  it('rejects an authorized rollover whose value is not above opening', () => {
+    const issues = validateShiftReadings(
+      { ...VALID, petrolOpening: '99990', petrolClosing: '20' },
+      { petrol: true, petrolRolloverValue: 500 },
+    )
+    expect(issues).toHaveLength(1)
+    expect(issues[0].field).toBe('petrolClosing')
+  })
+
   it('flags non-positive prices', () => {
     const issues = validateShiftReadings({ ...VALID, petrolPrice: '0', dieselPrice: '0' })
     expect(issues.map((i) => i.field)).toEqual(

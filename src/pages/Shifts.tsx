@@ -40,21 +40,39 @@ export default function Shifts() {
   const toast = useToast()
   const [inputs, setInputs] = useState<ShiftValidationInput>(INITIAL_INPUTS)
   const [issues, setIssues] = useState<ValidationIssue[]>([])
+  // Explicit rollover authorization — never inferred from readings.
+  const [rollover, setRollover] = useState({
+    petrol: false,
+    diesel: false,
+    petrolValue: '100000',
+    dieselValue: '100000',
+  })
 
   const onField = (field: keyof ShiftValidationInput) => (event: ChangeEvent<HTMLInputElement>) =>
     setInputs((prev) => ({ ...prev, [field]: event.target.value }))
 
+  const parsedRollover = useMemo(
+    () => ({
+      petrol: rollover.petrol ? Number(rollover.petrolValue) : undefined,
+      diesel: rollover.diesel ? Number(rollover.dieselValue) : undefined,
+    }),
+    [rollover],
+  )
+
   const totals = useMemo(
     () =>
-      computeShiftTotals({
-        petrolOpening: parseMeterReadingOrZero(inputs.petrolOpening),
-        petrolClosing: parseMeterReadingOrZero(inputs.petrolClosing),
-        dieselOpening: parseMeterReadingOrZero(inputs.dieselOpening),
-        dieselClosing: parseMeterReadingOrZero(inputs.dieselClosing),
-        petrolPrice: parseMeterReadingOrZero(inputs.petrolPrice),
-        dieselPrice: parseMeterReadingOrZero(inputs.dieselPrice),
-      }),
-    [inputs],
+      computeShiftTotals(
+        {
+          petrolOpening: parseMeterReadingOrZero(inputs.petrolOpening),
+          petrolClosing: parseMeterReadingOrZero(inputs.petrolClosing),
+          dieselOpening: parseMeterReadingOrZero(inputs.dieselOpening),
+          dieselClosing: parseMeterReadingOrZero(inputs.dieselClosing),
+          petrolPrice: parseMeterReadingOrZero(inputs.petrolPrice),
+          dieselPrice: parseMeterReadingOrZero(inputs.dieselPrice),
+        },
+        { petrolValue: parsedRollover.petrol, dieselValue: parsedRollover.diesel },
+      ),
+    [inputs, parsedRollover],
   )
 
   const reconciliation = useMemo(
@@ -67,7 +85,12 @@ export default function Shifts() {
   )
 
   const onValidate = () => {
-    const found = validateShiftReadings(inputs)
+    const found = validateShiftReadings(inputs, {
+      petrol: rollover.petrol,
+      diesel: rollover.diesel,
+      petrolRolloverValue: Number(rollover.petrolValue),
+      dieselRolloverValue: Number(rollover.dieselValue),
+    })
     setIssues(found)
     toast(
       found.length === 0
@@ -152,10 +175,62 @@ export default function Shifts() {
           {field('cashCollected', 'Cash collected (₹)')}
           {field('upiCollected', 'UPI / card collected (₹)')}
         </div>
+
+        <fieldset className="rollover">
+          <legend>Meter rollover / reset (authorized only)</legend>
+          <p className="small">
+            Authorize only with a reason recorded. Rollover value is the totalizer wrap value (meter
+            returns to 0 above it), e.g. 100000 for a 5-digit meter.
+          </p>
+          <div className="formgrid">
+            <div className="field">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={rollover.petrol}
+                  onChange={(event) =>
+                    setRollover((prev) => ({ ...prev, petrol: event.target.checked }))
+                  }
+                />
+                Petrol P1 rollover authorized
+              </label>
+              <input
+                aria-label="Petrol rollover value"
+                type="number"
+                value={rollover.petrolValue}
+                disabled={!rollover.petrol}
+                onChange={(event) =>
+                  setRollover((prev) => ({ ...prev, petrolValue: event.target.value }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={rollover.diesel}
+                  onChange={(event) =>
+                    setRollover((prev) => ({ ...prev, diesel: event.target.checked }))
+                  }
+                />
+                Diesel D1 rollover authorized
+              </label>
+              <input
+                aria-label="Diesel rollover value"
+                type="number"
+                value={rollover.dieselValue}
+                disabled={!rollover.diesel}
+                onChange={(event) =>
+                  setRollover((prev) => ({ ...prev, dieselValue: event.target.value }))
+                }
+              />
+            </div>
+          </div>
+        </fieldset>
         <div className="formactions">
           <button
             className="btn primary"
-            onClick={() => toast('Shift saved as draft (demo only).')}
+            onClick={() => toast('Demo only: draft is not persisted.')}
           >
             Save draft
           </button>
@@ -213,29 +288,31 @@ export default function Shifts() {
                 : 'Collected short'}
           </span>
         </div>
-        <table>
-          <tbody>
-            <tr>
-              <td>Expected sales (petrol + diesel)</td>
-              <td className="right">{money(reconciliation.expected)}</td>
-            </tr>
-            <tr>
-              <td>Collections (cash + UPI/card)</td>
-              <td className="right">{money(reconciliation.collected)}</td>
-            </tr>
-            <tr>
-              <td>
-                <b>Variance</b>
-              </td>
-              <td className="right">
-                <b>
-                  {reconciliation.variance >= 0 ? '+' : ''}
-                  {money(reconciliation.variance)}
-                </b>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="tablewrap">
+          <table>
+            <tbody>
+              <tr>
+                <td>Expected sales (petrol + diesel)</td>
+                <td className="right">{money(reconciliation.expected)}</td>
+              </tr>
+              <tr>
+                <td>Collections (cash + UPI/card)</td>
+                <td className="right">{money(reconciliation.collected)}</td>
+              </tr>
+              <tr>
+                <td>
+                  <b>Variance</b>
+                </td>
+                <td className="right">
+                  <b>
+                    {reconciliation.variance >= 0 ? '+' : ''}
+                    {money(reconciliation.variance)}
+                  </b>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   )

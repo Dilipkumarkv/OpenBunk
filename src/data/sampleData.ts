@@ -107,6 +107,7 @@ export const creditAccounts = [
     last: 'Today · ₹4,800',
     status: 'Near limit',
     tone: 'amber',
+    ageing: '0–30 days',
   },
   {
     customer: 'Melkote Agro Services',
@@ -116,6 +117,7 @@ export const creditAccounts = [
     last: 'Today · ₹2,400',
     status: 'Active',
     tone: 'green',
+    ageing: '0–30 days',
   },
   {
     customer: 'Ravi Enterprises',
@@ -125,6 +127,7 @@ export const creditAccounts = [
     last: '08 Nov · ₹1,600',
     status: 'Over limit',
     tone: 'red',
+    ageing: '60+ days',
   },
   {
     customer: 'Green Field Farms',
@@ -134,6 +137,7 @@ export const creditAccounts = [
     last: 'Yesterday · ₹3,100',
     status: 'Active',
     tone: 'green',
+    ageing: '0–30 days',
   },
 ] as const
 
@@ -149,6 +153,12 @@ export const collectionBreakdown = [
   { mode: 'UPI', amount: '₹ 1,12,600', share: '39.5%', tone: 'blue' },
   { mode: 'Card', amount: '₹ 57,180', share: '20.1%', tone: 'blue' },
   { mode: 'Credit', amount: '₹ 18,450', share: '6.5%', tone: 'amber' },
+] as const
+
+export const demoAlerts = [
+  { tone: 'red', text: 'Ravi Enterprises is over its credit limit (₹ 28,400 vs ₹ 25,000).' },
+  { tone: 'amber', text: 'Dip variance −18 L on Tank T-01 pending reconciliation.' },
+  { tone: 'blue', text: 'Afternoon shift still open — close before 22:00 to lock the day.' },
 ] as const
 
 export const reportCatalogue = [

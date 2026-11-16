@@ -10,7 +10,9 @@ export default function Credit() {
   const visible = creditAccounts.filter((account) =>
     q === ''
       ? true
-      : `${account.customer} ${account.account} ${account.last}`.toLowerCase().includes(q),
+      : `${account.customer} ${account.account} ${account.last} ${account.ageing}`
+          .toLowerCase()
+          .includes(q),
   )
 
   return (
@@ -61,41 +63,45 @@ export default function Credit() {
             aria-label="Search customer"
           />
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Account</th>
-              <th>Credit limit</th>
-              <th>Outstanding</th>
-              <th>Last transaction</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((account) => (
-              <tr key={account.account}>
-                <td>
-                  <b>{account.customer}</b>
-                </td>
-                <td>{account.account}</td>
-                <td>{account.limit}</td>
-                <td>{account.outstanding}</td>
-                <td>{account.last}</td>
-                <td>
-                  <span className={`pill ${account.tone}`}>{account.status}</span>
-                </td>
-              </tr>
-            ))}
-            {visible.length === 0 && (
+        <div className="tablewrap">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={6} className="emptyhint">
-                  No customers match “{query}”.
-                </td>
+                <th>Customer</th>
+                <th>Account</th>
+                <th>Credit limit</th>
+                <th>Outstanding</th>
+                <th>Last transaction</th>
+                <th>Ageing</th>
+                <th>Status</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visible.map((account) => (
+                <tr key={account.account}>
+                  <td>
+                    <b>{account.customer}</b>
+                  </td>
+                  <td>{account.account}</td>
+                  <td>{account.limit}</td>
+                  <td>{account.outstanding}</td>
+                  <td>{account.last}</td>
+                  <td>{account.ageing}</td>
+                  <td>
+                    <span className={`pill ${account.tone}`}>{account.status}</span>
+                  </td>
+                </tr>
+              ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="emptyhint">
+                    No customers match “{query}”.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   )

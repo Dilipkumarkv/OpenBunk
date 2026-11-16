@@ -7,6 +7,8 @@
  * - Validation (see validation.ts) is strict and reports human-readable issues.
  */
 
+import { round2 } from './money'
+
 export interface ShiftReadings {
   petrolOpening: number
   petrolClosing: number
@@ -14,6 +16,16 @@ export interface ShiftReadings {
   dieselClosing: number
   petrolPrice: number
   dieselPrice: number
+}
+
+/**
+ * Explicit rollover config, per fuel. Never inferred silently:
+ * an authorized rollover records the totalizer wrap value (value at which the
+ * meter returns to 0). Volume = (rolloverValue − opening) + closing.
+ */
+export interface RolloverConfig {
+  petrolValue?: number
+  dieselValue?: number
 }
 
 export interface ShiftTotals {
@@ -29,21 +41,48 @@ function num(value: number): number {
 }
 
 /**
- * Computes volumes (closing − opening totalizers) and values (volume × price).
- * Non-finite inputs are treated as 0. A zero price legitimately yields a zero value.
+ * Meter volume with explicit rollover handling.
+ * - closing >= opening: closing − opening (normal case)
+ * - closing < opening and rolloverValue authorised (rolloverValue > opening):
+ *   (rolloverValue − opening) + closing
+ * - otherwise closing − opening (negative; validation flags it — never silently corrected)
  */
-export function computeShiftTotals(readings: ShiftReadings): ShiftTotals {
-  const petrolVolume = num(readings.petrolClosing) - num(readings.petrolOpening)
-  const dieselVolume = num(readings.dieselClosing) - num(readings.dieselOpening)
-  // `+ 0` normalizes negative zero (e.g. -500 * 0) to +0
-  const petrolValue = petrolVolume * num(readings.petrolPrice) + 0
-  const dieselValue = dieselVolume * num(readings.dieselPrice) + 0
+export function computeVolume(opening: number, closing: number, rolloverValue?: number): number {
+  const open = num(opening)
+  const close = num(closing)
+  if (close >= open) return close - open
+  if (rolloverValue !== undefined && Number.isFinite(rolloverValue) && rolloverValue > open) {
+    return rolloverValue - open + close
+  }
+  return close - open
+}
+
+/**
+ * Computes volumes (closing − opening totalizers) and values (volume × price).
+ * Non-finite inputs are treated as 0; values are rounded half-up to 2 dp.
+ */
+export function computeShiftTotals(
+  readings: ShiftReadings,
+  rollover?: RolloverConfig,
+): ShiftTotals {
+  const petrolVolume = computeVolume(
+    readings.petrolOpening,
+    readings.petrolClosing,
+    rollover?.petrolValue,
+  )
+  const dieselVolume = computeVolume(
+    readings.dieselOpening,
+    readings.dieselClosing,
+    rollover?.dieselValue,
+  )
+  const petrolValue = round2(petrolVolume * num(readings.petrolPrice)) + 0 // +0 normalizes -0
+  const dieselValue = round2(dieselVolume * num(readings.dieselPrice)) + 0
   return {
     petrolVolume,
     dieselVolume,
     petrolValue,
     dieselValue,
-    totalValue: petrolValue + dieselValue,
+    totalValue: round2(petrolValue + dieselValue),
   }
 }
 

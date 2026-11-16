@@ -16,6 +16,18 @@ export interface ShiftValidationInput {
   upiCollected: string
 }
 
+/**
+ * Explicit rollover authorization (never inferred). When authorized, a totalizer
+ * decreasing through 0 is legitimate and closing<opening is not an error.
+ * The rollover value itself must be > the opening reading to be valid.
+ */
+export interface RolloverAuthorization {
+  petrol?: boolean
+  diesel?: boolean
+  petrolRolloverValue?: number
+  dieselRolloverValue?: number
+}
+
 export interface ValidationIssue {
   field: keyof ShiftValidationInput
   message: string
@@ -47,7 +59,10 @@ function required(
 }
 
 /** Validates a raw shift draft. Empty array means valid. */
-export function validateShiftReadings(input: ShiftValidationInput): ValidationIssue[] {
+export function validateShiftReadings(
+  input: ShiftValidationInput,
+  rollover: RolloverAuthorization = {},
+): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const parsed = {} as Record<keyof ShiftValidationInput, number | null>
 
@@ -68,20 +83,50 @@ export function validateShiftReadings(input: ShiftValidationInput): ValidationIs
     parsed.petrolClosing !== null &&
     parsed.petrolClosing < parsed.petrolOpening
   ) {
-    issues.push({
-      field: 'petrolClosing',
-      message: 'Petrol P1 closing is below opening — check the meter readings.',
-    })
+    if (rollover.petrol) {
+      if (
+        rollover.petrolRolloverValue === undefined ||
+        !Number.isFinite(rollover.petrolRolloverValue) ||
+        rollover.petrolRolloverValue <= parsed.petrolOpening
+      ) {
+        issues.push({
+          field: 'petrolClosing',
+          message:
+            'Authorized petrol rollover needs a rollover value greater than the opening reading.',
+        })
+      }
+    } else {
+      issues.push({
+        field: 'petrolClosing',
+        message:
+          'Petrol P1 closing is below opening — check the meter readings (or authorize a rollover).',
+      })
+    }
   }
   if (
     parsed.dieselOpening !== null &&
     parsed.dieselClosing !== null &&
     parsed.dieselClosing < parsed.dieselOpening
   ) {
-    issues.push({
-      field: 'dieselClosing',
-      message: 'Diesel D1 closing is below opening — check the meter readings.',
-    })
+    if (rollover.diesel) {
+      if (
+        rollover.dieselRolloverValue === undefined ||
+        !Number.isFinite(rollover.dieselRolloverValue) ||
+        rollover.dieselRolloverValue <= parsed.dieselOpening
+      ) {
+        issues.push({
+          field: 'dieselClosing',
+          message:
+            'Authorized diesel rollover needs a rollover value greater than the opening reading.',
+        })
+      }
+    } else {
+      issues.push({
+        field: 'dieselClosing',
+        message:
+          'Diesel D1 closing is below opening — check the meter readings (or authorize a rollover).',
+      })
+    }
   }
 
   return issues

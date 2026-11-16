@@ -49,34 +49,36 @@ export default function Fuel() {
           <h3>Tank register</h3>
           <span className="small">Illustrative stock</span>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Tank</th>
-              <th>Product</th>
-              <th>Capacity</th>
-              <th>Book stock</th>
-              <th>Physical dip</th>
-              <th>Variance</th>
-              <th>Level</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tankRegister.map((tank) => (
-              <tr key={tank.tank}>
-                <td>{tank.tank}</td>
-                <td>{tank.product}</td>
-                <td>{tank.capacity}</td>
-                <td>{tank.book}</td>
-                <td>{tank.dip}</td>
-                <td>
-                  <span className={`pill ${tank.tone}`}>{tank.variance}</span>
-                </td>
-                <td>{tank.level}</td>
+        <div className="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tank</th>
+                <th>Product</th>
+                <th>Capacity</th>
+                <th>Book stock</th>
+                <th>Physical dip</th>
+                <th>Variance</th>
+                <th>Level</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tankRegister.map((tank) => (
+                <tr key={tank.tank}>
+                  <td>{tank.tank}</td>
+                  <td>{tank.product}</td>
+                  <td>{tank.capacity}</td>
+                  <td>{tank.book}</td>
+                  <td>{tank.dip}</td>
+                  <td>
+                    <span className={`pill ${tank.tone}`}>{tank.variance}</span>
+                  </td>
+                  <td>{tank.level}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
@@ -86,32 +88,34 @@ export default function Fuel() {
             ＋ New receipt
           </button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Supplier</th>
-              <th>Product</th>
-              <th>Quantity</th>
-              <th>Invoice</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fuelReceipts.map((receipt) => (
-              <tr key={receipt.invoice}>
-                <td>{receipt.date}</td>
-                <td>{receipt.supplier}</td>
-                <td>{receipt.product}</td>
-                <td>{receipt.qty}</td>
-                <td>{receipt.invoice}</td>
-                <td>
-                  <span className={`pill ${receipt.tone}`}>{receipt.status}</span>
-                </td>
+        <div className="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Invoice</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {fuelReceipts.map((receipt) => (
+                <tr key={receipt.invoice}>
+                  <td>{receipt.date}</td>
+                  <td>{receipt.supplier}</td>
+                  <td>{receipt.product}</td>
+                  <td>{receipt.qty}</td>
+                  <td>{receipt.invoice}</td>
+                  <td>
+                    <span className={`pill ${receipt.tone}`}>{receipt.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   )

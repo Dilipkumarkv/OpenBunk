@@ -229,6 +229,10 @@ main {
   display: grid;
   gap: 16px;
 }
+.grid > *,
+.two > * {
+  min-width: 0; /* let grid items shrink below content size — tablewrap handles overflow */
+}
 .stats {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 18px;
@@ -310,6 +314,13 @@ main {
 }
 
 /* Table */
+.tablewrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tablewrap table {
+  min-width: 640px;
+}
 table {
   width: 100%;
   border-collapse: collapse;
@@ -403,6 +414,40 @@ tr:last-child td {
   margin-right: 5px;
 }
 
+/* Focus visibility (keyboard navigation) */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Rollover fieldset */
+.rollover {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+.rollover legend {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 6px;
+}
+.rollover .small {
+  margin: 4px 0 12px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #65738a;
+  margin-bottom: 6px;
+}
+.check input {
+  width: auto;
+}
+
 /* Notice / forms */
 .notice {
   background: #f0f5ff;
@@ -477,6 +522,20 @@ tr:last-child td {
   padding: 30px;
   text-align: center;
   color: var(--muted);
+}
+.alerts .alertlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.alertlist li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
 }
 .search {
   max-width: 190px;

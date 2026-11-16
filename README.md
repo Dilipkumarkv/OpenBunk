@@ -74,6 +74,8 @@ src/
   App.tsx                  # routes (HashRouter)
   main.tsx                 # entry point
 .env.example               # documented env vars; copy to .env (never commit .env)
+docs/domain-model.md       # entities, invariants, immutability rules
+docs/calculations.md       # formulas, examples, edge cases, rounding/rollover policy
 STATUS.md                  # phase tracking — updated after every phase
 ```
 

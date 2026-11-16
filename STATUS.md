@@ -141,6 +141,40 @@ domain layer.
 - Domain layer is intentionally UI-agnostic so the FastAPI backend (Phase 04) can mirror it.
 - Credit-limit and dip-variance rules not extracted yet (Phase 05+); only meter/reading/reconciliation in scope.
 
+## Spec re-verification against official phase files (2026-11-16)
+
+Verified the repo against `02_UI_PROTOTYPE.md` and `03_DOMAIN_MODEL_AND_RULES.md`
+(OpenBunk_Mobile_Harness_Phases.zip, Downloads). Gaps found and fixed in this pass:
+
+- [fixed] Phase 02 — Dashboard was missing **alerts** and **collection mix** (added alerts card +
+  collection-mix KPI row; alerts labeled demo data).
+- [fixed] Phase 02 — no search/filter on transactions (added filter on Dashboard recent transactions;
+  credit ledger already had one).
+- [fixed] Phase 02 — mobile tables not adapted (`.tablewrap` overflow-x scroll; tables min 640 px).
+- [fixed] Phase 02 — grid children could not shrink (`.grid > *` min-width: 0) — `/reports` had
+  ~68 px horizontal overflow at narrow width; now none on any route.
+- [fixed] Phase 02 — no visible-focus rule (`:focus-visible` outline added).
+- [fixed] Phase 02 — credit table gained **ageing** column (0–30 / 60+ days).
+- [fixed] Phase 02 — "saved" toast wording replaced with explicit "Demo only: … not persisted".
+- [fixed] Phase 03 — missing deliverables created: `docs/domain-model.md` (entities, invariants,
+  relationships, immutability) and `docs/calculations.md` (formulas, examples, edge cases,
+  rounding + rollover policies).
+- [fixed] Phase 03 — no rounding/rollover tests (added `round2` with float-safe half-up algorithm,
+  `computeVolume` with explicit authorized wraparound, rollover-aware validation; money/reconcile
+  now round half-up to 2 dp). Note: first epsilon-based `round2` failed tests for 1.005/2.675 —
+  replaced with milli-scale algorithm; all pass.
+- [noted] Sample data disclaimer visible on every screen (topbar "Demo mode" + sidebar + per-page
+  demo/illustrative labels); buttons use prototype/demo language throughout.
+
+**Re-verification (local, 2026-11-16):** lint 0; type-check 0; tests 5 files / **30 passed**
+(shift 12, validation 7, reconcile 6, money 4, App smoke 1); format:check 0; build exit 0.
+**Browser check (built app, `vite preview`, 616 px pane — within mobile breakpoint):** all 6 routes
+render, no console errors, no document-level horizontal overflow; inline validation error confirmed
+working live (set closing below opening → `aria-invalid=true`, error text shown). 360 px capture
+not possible — harness pane fixed ≈616 px; CSS covers ≤700 px via existing breakpoints.
+**Known gap:** `screenshot` tool requires a visible desktop window — unavailable from this session;
+verification was DOM/console-based, not visual.
+
 ## Known limitations
 
 - Prototype uses illustrative sample data.

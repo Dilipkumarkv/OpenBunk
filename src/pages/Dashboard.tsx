@@ -1,6 +1,13 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../components/toastContext'
-import { recentTransactions, salesTrend, shiftStatus } from '../data/sampleData'
+import {
+  collectionBreakdown,
+  demoAlerts,
+  recentTransactions,
+  salesTrend,
+  shiftStatus,
+} from '../data/sampleData'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -12,6 +19,16 @@ function greeting(): string {
 export default function Dashboard() {
   const toast = useToast()
   const navigate = useNavigate()
+  const [txnQuery, setTxnQuery] = useState('')
+
+  const q = txnQuery.trim().toLowerCase()
+  const visibleTransactions = recentTransactions.filter((txn) =>
+    q === ''
+      ? true
+      : `${txn.time} ${txn.label} ${txn.mode} ${txn.amount} ${txn.status}`
+          .toLowerCase()
+          .includes(q),
+  )
 
   return (
     <>
@@ -70,7 +87,38 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid two">
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="cardhead">
+          <h3>Collection mix today</h3>
+          <span className="small">Demo data</span>
+        </div>
+        <div className="kpirow">
+          {collectionBreakdown.map((row) => (
+            <div className="kpi" key={row.mode}>
+              <span>{row.mode}</span>
+              <b>{row.amount}</b>
+              <span className="small">{row.share} of collections</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card alerts" style={{ marginTop: 16 }}>
+        <div className="cardhead">
+          <h3>Alerts</h3>
+          <span className="small">Demo data · {demoAlerts.length} open</span>
+        </div>
+        <ul className="alertlist">
+          {demoAlerts.map((alert) => (
+            <li key={alert.text}>
+              <span className={`pill ${alert.tone}`}>!</span>
+              <span>{alert.text}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="grid two" style={{ marginTop: 16 }}>
         <div className="card">
           <div className="cardhead">
             <h3>Sales trend</h3>
@@ -119,34 +167,52 @@ export default function Dashboard() {
       <div className="card" style={{ marginTop: 16 }}>
         <div className="cardhead">
           <h3>Recent transactions</h3>
-          <Link to="/reports" className="btn">
-            View all →
-          </Link>
+          <div className="actions">
+            <input
+              className="search"
+              placeholder="Filter transactions…"
+              value={txnQuery}
+              onChange={(event) => setTxnQuery(event.target.value)}
+              aria-label="Filter transactions"
+            />
+            <Link to="/reports" className="btn">
+              View all →
+            </Link>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Transaction</th>
-              <th>Mode</th>
-              <th className="right">Amount</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentTransactions.map((txn) => (
-              <tr key={`${txn.time}-${txn.label}`}>
-                <td>{txn.time}</td>
-                <td>{txn.label}</td>
-                <td>{txn.mode}</td>
-                <td className="right">{txn.amount}</td>
-                <td>
-                  <span className={`pill ${txn.tone}`}>{txn.status}</span>
-                </td>
+        <div className="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Transaction</th>
+                <th>Mode</th>
+                <th className="right">Amount</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visibleTransactions.map((txn) => (
+                <tr key={`${txn.time}-${txn.label}`}>
+                  <td>{txn.time}</td>
+                  <td>{txn.label}</td>
+                  <td>{txn.mode}</td>
+                  <td className="right">{txn.amount}</td>
+                  <td>
+                    <span className={`pill ${txn.tone}`}>{txn.status}</span>
+                  </td>
+                </tr>
+              ))}
+              {visibleTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="emptyhint">
+                    No transactions match “{txnQuery}”.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   )

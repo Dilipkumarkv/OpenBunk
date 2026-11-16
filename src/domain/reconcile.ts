@@ -3,6 +3,8 @@
  * sales value computed from meter readings.
  */
 
+import { round2 } from './money'
+
 export type ReconciliationStatus = 'balanced' | 'over' | 'short'
 
 export interface ReconciliationResult {
@@ -23,12 +25,13 @@ export function reconcileCollections(
   collections: number[],
   tolerance = 1,
 ): ReconciliationResult {
-  const collected = collections.reduce(
+  const collectedRaw = collections.reduce(
     (sum, value) => sum + (Number.isFinite(value) ? value : 0),
     0,
   )
-  const expected = Number.isFinite(expectedValue) ? expectedValue : 0
-  const variance = collected - expected + 0 // normalize -0
+  const expected = round2(Number.isFinite(expectedValue) ? expectedValue : 0)
+  const collected = round2(collectedRaw)
+  const variance = round2(collected - expected) // round2 also normalizes -0
 
   let status: ReconciliationStatus = 'balanced'
   if (variance > tolerance) status = 'over'

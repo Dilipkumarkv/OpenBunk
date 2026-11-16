@@ -53,7 +53,7 @@ export default function Settings() {
         <div className="formactions">
           <button
             className="btn primary"
-            onClick={() => toast('Settings saved locally in prototype session.')}
+            onClick={() => toast('Demo only: settings are not persisted.')}
           >
             Save settings
           </button>
