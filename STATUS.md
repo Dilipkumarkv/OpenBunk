@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-UI through quality gates (Phase 07) — complete. Next: deployment (Phase 08) or release readiness (Phase 09).
+UI through quality gates (Phase 07) — complete and CI-green. Next: deployment (Phase 08) or release readiness (Phase 09).
 
 ## Requirements
 
@@ -317,6 +317,10 @@ CI pytest entry point). Branch protection on `main` NOT enabled — owner decisi
 - backend: **57/57 pytest** (was 43; +test_domain 7, +test_phase07_scenarios 6, +test_backup_restore 1)
 - migration round-trip ✓ (3 revisions: initial, auth+login_attempts, shifts.version)
 - CI re-check needed after push; see run below
+
+**CI:** run 43818858202 (`dac8c91`) FAILED — `test_backup_restore` passed `check_same_thread`
+(SQLite-only) to psycopg/Postgres; 56/57 passed. Fixed in `a94f685`; run 43819137910:
+**backend (Postgres) ✓ · frontend ✓.**
 
 **Defects found & fixed during this phase (honest log):**
 
