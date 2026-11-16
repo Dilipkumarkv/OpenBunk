@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-All nine phases complete. Verdict: **Prototype v0.9 — CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md).
+All nine phases complete. Verdict: **Prototype v0.9 - CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md). An external audit (`AUDIT.md`, 2026-11-16) found P0 blockers; the prototype label stands and no real data should be entered until Wave 0 is complete.
 
 ## Requirements
 
@@ -389,6 +389,19 @@ covered (`tests/test_adjustments.py`, 3 tests; 60 backend tests total).
 ## Phase 09 outcome
 
 **Owner decision (2026-11-16): remain prototype.** No pilot, no production. Repo stays a CI-green prototype with explicit verification records; revisit only with a real staging host + operator UAT.
+
+## External audit (2026-11-16)
+
+Independent review of commit `ce09e4b` is recorded in [`AUDIT.md`](AUDIT.md). Verdict: **prototype only,
+not safe for real station data**. The review confirms the build/CI and session/authorization foundations
+are sound, but identifies seven P0 blockers: credit limits are advisory; sale price/product/nozzle/shift
+linkage is client-trusted; re-auth PINs have no throttle; reconciliation can be skipped or self-approved;
+populated-database migrations fail (reproduced: `Cannot add a NOT NULL column with default value NULL`)
+while running on container start; JSON backup/restore is not a safe DR mechanism; and demo readings plus
+false "Connected" states can be written as real data. The report includes a four-wave upgrade plan, an
+improvement backlog, product enhancements, and a claim-by-claim documentation correction table.
+
+**No code was changed by the audit.** Remediation is not started; Wave 0 must precede any pilot discussion.
 
 ## Known limitations
 
