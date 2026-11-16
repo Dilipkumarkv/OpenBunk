@@ -32,6 +32,9 @@ All nine phases complete and Wave 0 P0 remediation implemented. Verdict: **Proto
   emulation — Dashboard, Shifts (signed-out), Fuel, Credit, Reports, Settings, Login all render
   the DeepBNK brand, station strip under the top bar, ● Offline pill, and empty states with no
   sample numbers; reports overflow fixed and re-verified.
+- Committed to `main` as `d70cba8`; follow-up `400841d` updates the compose-rehearsal brand
+  assertion (`grep -i deepbnk`). CI run 43852060400: **success** — lint/type-check/test/build,
+  backend PostgreSQL tests, and compose stack rehearsal all green.
 
 ## Requirements
 
