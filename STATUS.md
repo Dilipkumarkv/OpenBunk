@@ -2,7 +2,8 @@
 
 ## Current milestone
 
-UI prototype in-app (Phase 02) and domain rules (Phase 03) — complete. Next: API/database (Phase 04).
+UI prototype in-app (Phase 02), domain rules (Phase 03) and backend/database (Phase 04) — complete.
+Next: auth/security/roles (Phase 05).
 
 ## Requirements
 
@@ -20,7 +21,7 @@ UI prototype in-app (Phase 02) and domain rules (Phase 03) — complete. Next: A
 - [x] Repository foundation (2026-11-15) — see verification results below.
 - [x] UI moved into project repository (2026-11-16) — see Phase 02 below.
 - [x] Domain rules and tests (2026-11-16) — see Phase 03 below.
-- [ ] API/database
+- [x] API/database (2026-11-16) — see Phase 04 below.
 - [ ] Auth/security
 - [ ] Integrations
 - [ ] CI and quality gates
@@ -174,6 +175,44 @@ working live (set closing below opening → `aria-invalid=true`, error text show
 not possible — harness pane fixed ≈616 px; CSS covers ≤700 px via existing breakpoints.
 **Known gap:** `screenshot` tool requires a visible desktop window — unavailable from this session;
 verification was DOM/console-based, not visual.
+
+## Phase 04 — Backend & Database (2026-11-16)
+
+FastAPI + SQLAlchemy 2 + Alembic + Pydantic under `backend/`; UI intentionally not wired yet
+(Phase 06). PostgreSQL-ready; local tests on SQLite, CI tests on postgres:16 service.
+
+**Built:** `/api/v1` — health/readiness (no secrets), session auth (pbkdf2 PIN hash, sha256 token
+hash, expiry + revoke), station config (GET/PUT), fuel catalog (products/tanks/nozzles + derived
+tank stock from append-only `stock_movements`), shifts (open/list/detail/readings upsert/validate/
+**close — atomic, idempotent via `Idempotency-Key`, rollover-aware, book-stock deducted**), credit
+(customers + append-only ledger, balance + limit status), sales/payments (credit tender posts a
+ledger charge), reports (daily-sales by product from closed shifts; collections by tender from
+payments), audit (owner/manager only), idempotency keys for posting endpoints.
+
+**Cross-cutting:** request IDs (`X-Request-Id`), structured stdout logs (no secrets), structured
+error bodies `{error:{code,message,details,requestId}}`, CORS from `CORS_ORIGINS`, in-memory
+per-IP rate limit on `/api/v1/session`, pagination + allowlisted sort on lists, NUMERIC money
+(half-up 2 dp), append-only audit/stock/credit-ledger tables, FK/unique/check constraints,
+migrations reversible (upgrade→downgrade→upgrade verified on SQLite).
+
+**Verification (all real):**
+
+- `python -m pytest` local (SQLite tmp): **27 passed**
+- Migration: `alembic upgrade head` from empty DB ✓; `downgrade base` → `upgrade head` ✓ (SQLite)
+- CI run 43808165917 (commit `279d042`): backend job **FAILED — Post Setup Python cache step
+  (no deps cached because install used `--no-cache-dir`); migrate ✓ and Postgres test suite ✓ ran.**
+  Fixed in `a91cfcf` (dropped pip cache); CI run 43808304257: **backend (Postgres) ✓, frontend ✓.**
+- Seed: `python -m app.seed` — station OB-001, P1/P2/D1, tanks T-01/T-02, demo employees (PIN 1234).
+
+**Known gaps / not done**
+
+- Auth is demo-grade (pbkdf2 + expiry + revoke); roles enforced only on `/audit`; Phase 05 hardens
+  (role checks everywhere, refresh strategy, stronger PIN policy).
+- Rate limiter is in-memory per instance; needs Redis for multi-instance (Phase 05/08).
+- UUID path params rely on SQLAlchemy Uuid coercion (works on SQLite+PG); no raw SQL anywhere.
+- Backups/restore procedure documented? Only via CI migration rehearsal — full backup restore
+  drill pending (Phase 08/09).
+- Frontend↔API integration pending (Phase 06). Demo PINs are 1234 — documented as demo-only.
 
 ## Known limitations
 
