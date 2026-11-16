@@ -8,7 +8,7 @@ on:
 jobs:
   checks:
     name: Lint, type-check, test, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
 
   compose:
     name: Compose stack rehearsal
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       OPENBUNK_SEED_PIN: '246813'
       POSTGRES_PASSWORD: ci-staging-only-password
@@ -93,7 +93,7 @@ jobs:
 
   backend:
     name: Backend tests (PostgreSQL)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -125,8 +125,8 @@ jobs:
 
       - name: Install PostgreSQL 16 client tools (must match the server major)
         run: |
-          # Ubuntu 24.04 ships PostgreSQL 16; the runner may default to a newer
-          # client, which writes settings a 16 server rejects during restore.
+          # Pin the runner to Ubuntu 24.04 so the distro client matches postgres:16;
+          # a newer client writes settings a 16 server rejects during restore.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16
           echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
