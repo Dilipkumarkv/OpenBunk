@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-UI prototype in-app (Phase 02) — complete. Next: domain rules and tests (Phase 03).
+UI prototype in-app (Phase 02) and domain rules (Phase 03) — complete. Next: API/database (Phase 04).
 
 ## Requirements
 
@@ -19,7 +19,7 @@ UI prototype in-app (Phase 02) — complete. Next: domain rules and tests (Phase
 - [x] Phase-by-phase harness instructions drafted.
 - [x] Repository foundation (2026-11-15) — see verification results below.
 - [x] UI moved into project repository (2026-11-16) — see Phase 02 below.
-- [ ] Domain rules and tests
+- [x] Domain rules and tests (2026-11-16) — see Phase 03 below.
 - [ ] API/database
 - [ ] Auth/security
 - [ ] Integrations
@@ -104,6 +104,42 @@ Single-file HTML prototype (`openbunk-prototype.html`, in Downloads) decomposed 
 - First `format:check` after port failed on 5 new files; fixed with `prettier --write`.
 - Number inputs snap to `0` when cleared (inherited from prototype `+v || 0` leniency); revisit in Phase 03.
 - All figures remain illustrative sample data; no persistence/auth/backend. Buttons are demo/prototype actions.
+
+## Phase 03 — Domain rules and tests (2026-11-16)
+
+**Number-input decision (explicit):** operator inputs hold raw strings — clearing a field no longer
+snaps to 0. Live calculation is lenient (invalid/empty → 0, never throws). "Validate readings" is
+strict and reports issues inline per field: required non-negative numbers, price > 0, and
+closing ≥ opening per fuel. Arithmetic error states (e.g. negative variance) are shown, not hidden.
+
+**Domain layer** (`src/domain/`, framework-free, no React/DOM imports):
+
+- `shift.ts` — `computeShiftTotals` (moved from `lib/shiftCalc.ts`, extended with `totalValue`),
+  `parseMeterReading` (strict: empty/non-numeric/non-finite/negative → null),
+  `parseMeterReadingOrZero` (lenient for live math).
+- `validation.ts` — `validateShiftReadings(rawStrings)` → per-field issues
+  (required, price > 0, closing ≥ opening for petrol and diesel).
+- `reconcile.ts` — `reconcileCollections(expected, collections[], tolerance=₹1)` →
+  expected/collected/variance + status `balanced` | `over` | `short`.
+
+**Shifts page** now uses string state, inline field errors (`aria-invalid`/`aria-describedby`),
+computes totals and a reconciliation preview (expected vs collected, variance, status pill) via the
+domain layer.
+
+**Verification (local, 2026-11-16):**
+
+- `npm run lint` → exit 0
+- `npm run type-check` → exit 0
+- `npm run test` → exit 0, 4 files / 19 tests passed (shift 7, validation 5, reconcile 6, App smoke 1)
+- `npm run format:check` → exit 0 (after `prettier --write .`, 1 file fixed)
+- `npm run build` → exit 0 (dist: index.html 0.58 kB, JS 288.07 kB / 88.54 kB gzip)
+
+**Notes**
+
+- `lib/shiftCalc.ts` removed; logic superseded by `src/domain/shift.ts`.
+- Reconciliation tolerance default ₹1 (absolute) — flag for product review when real POS/gateway data exists.
+- Domain layer is intentionally UI-agnostic so the FastAPI backend (Phase 04) can mirror it.
+- Credit-limit and dip-variance rules not extracted yet (Phase 05+); only meter/reading/reconciliation in scope.
 
 ## Known limitations
 

@@ -66,7 +66,9 @@ public/                    # static assets (favicon)
 src/
   components/              # Layout (sidebar/topbar shell), Toast provider + context
   data/sampleData.ts       # illustrative demo data — no real backend
-  lib/                     # format helpers + shiftCalc (meter difference math, unit-tested)
+  domain/                  # tested domain rules — no React/DOM: shift math & parsing,
+                           #   strict draft validation, collections reconciliation
+  lib/                     # format helpers (UI)
   pages/                   # Dashboard, Shifts, Fuel, Credit, Reports, Settings
   test/setup.ts            # Vitest setup (jest-dom matchers)
   App.tsx                  # routes (HashRouter)

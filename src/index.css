@@ -437,6 +437,14 @@ tr:last-child td {
 .field.full {
   grid-column: 1/-1;
 }
+.field-error {
+  color: var(--red);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--red);
+}
 .formactions {
   display: flex;
   gap: 9px;
