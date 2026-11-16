@@ -21,7 +21,8 @@ def _counts(engine):
 
 def test_backup_restore_roundtrip():
     settings = get_settings()
-    engine_source = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
+    kwargs = {"connect_args": {"check_same_thread": False}} if settings.DATABASE_URL.startswith("sqlite") else {}
+    engine_source = create_engine(settings.DATABASE_URL, **kwargs)
 
     before = _counts(engine_source)
     assert before["stations"] == 1
