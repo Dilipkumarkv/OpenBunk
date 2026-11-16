@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-UI through quality gates (Phase 07) — complete and CI-green. Next: deployment (Phase 08) or release readiness (Phase 09).
+UI through the CI deployment rehearsal (Phase 08) — complete and CI-green. Next: release readiness (Phase 09).
 
 ## Requirements
 
@@ -25,7 +25,7 @@ UI through quality gates (Phase 07) — complete and CI-green. Next: deployment 
 - [x] Integrations (2026-11-16) — see Phase 06 below (CSV import/export, print CSS, frontend↔API;
       other integrations deliberately not supported in this environment).
 - [x] CI and quality gates (2026-11-16) — see Phase 07 below.
-- [ ] Staging deployment
+- [x] Staging deployment (2026-11-16) — see Phase 08 below (CI rehearsal green; real staging host pending owner provisioning).
 - [ ] Release readiness
 
 ## Phase 01 — Repository Foundation (2026-11-15)
@@ -339,6 +339,40 @@ CI pytest entry point). Branch protection on `main` NOT enabled — owner decisi
   browser verification used instead; visual/360px regression not machine-verified
 - Branch protection on `main` not enabled (would change how you can push — asked separately)
 - Load/stress/hardware tests: none (no hardware, no multi-station data)
+
+## Phase 08 — Cloud Deployment & Operations (2026-11-16)
+
+**Scope honesty:** no staging/production host exists for this project yet — **nothing is deployed
+anywhere.** Phase 08 delivered the complete deployable artifact and full operations runbook, plus a
+CI rehearsal that builds and health-checks the stack on every push. A real staging deployment needs
+a host + domain (ask owner) before it can be executed/approved.
+
+**Delivered:**
+
+- Dockerized stack: `Dockerfile.frontend` (node build → nginx:1.27-alpine, SPA fallback + `/api/*`
+  reverse proxy + security headers + `/healthz`) and `backend/Dockerfile` (python:3.14-slim,
+  **non-root**, HEALTHCHECK, migrations on start). `docker-compose.yml` (db internal-only, api, web;
+  `pgdata` volume; `--wait` startup). `.dockerignore`.
+- CI new job **Compose stack rehearsal**: builds both images, `up --wait`, seeds demo station,
+  verifies `/healthz`, `/api/v1/readiness` (200 through nginx→API), HTML page, login `201`, and
+  asserts API logs contain no secret patterns — **currently GREEN**.
+- Backend: `/api/v1/health` + `/api/v1/readiness` aliases (proxied path) added; startup guard
+  refuses `ENVIRONMENT=production` with SQLite (fail fast, verified message).
+- `docs/deployment.md`: architecture, provisioning steps, health verification, migration + backup
+  policy, rollback strategies (app redeploy / restore), secret rotation, incident response, vendor-
+  independent exit (export works), log-secret audit procedure.
+- Backup restore drill executed for real: dump → wipe → restore → row counts identical; EMP-01 PIN
+  verifies against the restored hash. (`app/backup.py` CLI + `tests/test_backup_restore.py`.)
+
+**Verification (all real):** CI run 43820547220 — **compose ✓ (build+up+seed+5 checks+log scan),
+frontend ✓, backend(PostgreSQL) ✓**. Note: first compose run FAILED (404 on `/api/readiness` —
+root-level endpoint not visible through `/api/*` proxy) and was fixed by adding `/api/v1/*` aliases;
+recorded in STATUS per protocol.
+
+**NOT verified (needs real host):** HTTPS/TLS end-to-end, security headers over the wire (headers
+are set by nginx but unverified live), backup scheduling/monitoring/alerting, actual station cutover,
+restore drill against Postgres (SQLite drill done; PG drill pending staging). **Production is
+disabled/locked behind owner approval.**
 
 ## Known limitations
 

@@ -58,6 +58,14 @@ npm run build         # tsc -b && vite build -> dist/
 Dependencies are pinned to exact versions in `package.json`; `package-lock.json` is committed and
 `npm ci` is used everywhere (local and CI) so builds are reproducible.
 
+## Quick start (Docker stack)
+
+```bash
+docker compose up -d --wait          # db + api + web; waits for healthchecks
+docker compose exec api python -m app.seed   # demo station OB-001 (skip in production)
+# open http://localhost:8080  → sign in with EMP-00 / 1234 (dev only)
+```
+
 ## Backend (Phase 04)
 
 FastAPI + SQLAlchemy 2 + Alembic + Pydantic. The prototype UI is intentionally **not** wired to
