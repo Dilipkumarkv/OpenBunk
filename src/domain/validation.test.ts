@@ -14,7 +14,7 @@ const VALID: ShiftValidationInput = {
 }
 
 describe('validateShiftReadings', () => {
-  it('accepts the prototype default draft', () => {
+  it('accepts the default draft', () => {
     expect(validateShiftReadings(VALID)).toEqual([])
   })
 

@@ -1,8 +1,37 @@
-# OpenBunk Development Status
+# DeepBNK Development Status
 
 ## Current milestone
 
 All nine phases complete and Wave 0 P0 remediation implemented. Verdict: **Prototype v0.9 - CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md). The external audit (`AUDIT.md`, 2026-11-16) found seven P0 blockers; Wave 0 addresses them in code and tests (see the Wave 0 section), but the prototype label stands until CI, staging and operator UAT are re-verified.
+
+## UI revision — DeepBNK branding, station strip, no sample data (2026-11-16)
+
+- App name is **DeepBNK** everywhere user-visible (header, login, manifest, title, export/CSV filenames,
+  backend API title, seed station name). Internal identifiers that would break existing clients or
+  sessions were kept: `openbunk.*` sessionStorage keys, `OPENBUNK_SEED_PIN`, DB user/db names.
+- Connection pill reads **● Offline / ● Connected** (no "demo" wording anywhere in the UI).
+- All bundled sample/test data removed (`src/data/sampleData.ts` deleted). Every page now renders
+  empty states (`—`, "no data yet", sign-in guidance) until the API returns data; signed-out Shifts
+  no longer shows a fake catalog and close/save actions are disabled. Demo-mode login entry removed.
+- Station profile strip (name, code, address) renders below the top bar on every screen from
+  `src/config/station.ts` (signed-out) or the session station (signed-in).
+- Reports summary cards render empty hints as text, not inside a min-width table (fixes a
+  desktop horizontal-overflow artifact the empty states exposed).
+- Docs rewritten to match: README, STATUS, AGENTS (no-sample-data rule), operator guide, testing,
+  deployment, integrations, release-readiness, security-checklist.
+
+**Verification (2026-11-16):**
+
+- `npm run format:check` → exit 0 ("All matched files use Prettier code style")
+- `npm run lint` (oxlint) → exit 0, 0 warnings / 0 errors, 36 files
+- `npm run type-check` (`tsc -b`) → exit 0
+- `npm run test` (vitest) → exit 0, 9 files / 57 tests passed
+- `npm run build` → exit 0, `dist/` + PWA `sw.js` (precache 17 entries)
+- Built bundle grep: `DeepBNK` present; only `openbunk` matches are the three sessionStorage keys
+- Browser (Chrome, production build via `vite preview`): desktop 1365×950 and mobile 375×812
+  emulation — Dashboard, Shifts (signed-out), Fuel, Credit, Reports, Settings, Login all render
+  the DeepBNK brand, station strip under the top bar, ● Offline pill, and empty states with no
+  sample numbers; reports overflow fixed and re-verified.
 
 ## Requirements
 

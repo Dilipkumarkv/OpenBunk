@@ -1,4 +1,4 @@
-# OpenBunk — Calculation Specification
+# DeepBNK — Calculation Specification
 
 Status: v0.1. Formulas with worked examples and edge cases. Prototype implementation lives in
 `src/domain/` (framework-free, unit-tested). The backend (Phase 04) mirrors these rules;

@@ -1,4 +1,4 @@
-# OpenBunk — External Audit
+# DeepBNK — External Audit
 
 **Date:** 2026-11-16
 **Commit reviewed:** `ce09e4b` (branch `main`, working tree clean)

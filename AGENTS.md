@@ -1,4 +1,4 @@
-# OpenBunk — Agent Instructions (project-local)
+# DeepBNK — Agent Instructions (project-local)
 
 Conventions for any coding agent (human-piloted or harness-driven) working in this repo.
 This file complements `STATUS.md` and the phase docs; it does not override user instructions.
@@ -13,8 +13,9 @@ This file complements `STATUS.md` and the phase docs; it does not override user 
 
 ## Non-negotiables
 
-- **Demo/mock data stays labeled.** Never let sample data look real; never let a demo button claim
-  it wrote to the backend.
+- **No bundled sample/test data.** The UI ships empty states (`—`, "no data yet", sign-in
+  guidance) until the API returns data; never add placeholder figures. No button may claim a
+  server write that did not happen — unavailable actions say so.
 - **Financial correctness:** Decimal/NUMERIC money; rounding half-up to 2 dp at boundaries;
   posted records immutable; corrections = reversal/adjustment + audit event.
 - **Authorization everywhere:** UI hiding is not authorization. The matrix in `docs/permissions.md`

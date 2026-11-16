@@ -1,4 +1,4 @@
-# OpenBunk — Deployment & Operations Runbook
+# DeepBNK — Deployment & Operations Runbook
 
 Status: v0.9 (post-Wave 0 hardening). Staging-grade. **Production deployment requires explicit owner approval** and is not authorized as of this writing. The release label remains **Prototype v0.9** — do not enter real station data until a staging host, operator UAT, and owner sign-off are complete.
 
@@ -109,7 +109,7 @@ Production guards (enforced by `backend/app/config.py` when `ENVIRONMENT=product
 - Rejects SQLite `DATABASE_URL`
 - Rejects wildcard (`*`) or non-https CORS origins
 - Rejects database passwords shorter than 12 chars or common defaults
-- Rejects weak/default `OPENBUNK_SEED_PIN` (must be 6+ digits, not a demo default)
+- Rejects weak/default `OPENBUNK_SEED_PIN` (must be 6+ digits, not a known default)
 
 ## 6. Provision the host
 
@@ -186,9 +186,9 @@ curl -I https://station.example.com/healthz        # 200
 curl https://station.example.com/api/v1/readiness   # {"status":"ready","database":"ok"}
 ```
 
-## 8. Create the first owner (production, no demo users)
+## 8. Create the first owner (production, no seeded users)
 
-`OPENBUNK_SEED_PIN` is empty by production default, so no demo employees exist.
+`OPENBUNK_SEED_PIN` is empty by production default, so no seeded employees exist.
 
 Option A — seed once with a strong PIN, then create a real owner and disable seeding:
 
@@ -201,7 +201,7 @@ OPENBUNK_SEED_PIN=246813 docker compose --env-file .env exec -T api python -m ap
 
 Option B — create the owner directly via the API without seeding at all.
 
-Never leave `EMP-00`…`EMP-04` demo employees on a real deployment.
+Never leave `EMP-00`…`EMP-04` seeded employees on a real deployment.
 
 ## 9. Release procedure
 
@@ -294,10 +294,62 @@ Do not mark any item complete without the corresponding evidence.
 - [ ] Staging host provisioned with domain + TLS (Caddy/Let's Encrypt)
 - [ ] `ENVIRONMENT=production` confirmed; production guards pass at startup (no SQLite, no wildcard CORS, strong DB password, no weak seed PIN)
 - [ ] Staging backup/restore drill executed and documented (§11)
-- [ ] `OPENBUNK_SEED_PIN` empty; no demo employees (`EMP-00`…`EMP-04`) present
+- [ ] `OPENBUNK_SEED_PIN` empty; no seeded employees (`EMP-00`…`EMP-04`) present
 - [ ] Firewall allows only 22/80/443; database port not published
 - [ ] CI green on the release ref (all three jobs: checks, compose, backend)
 - [ ] Operator UAT with dummy data completed and feedback recorded
 - [ ] Android device, screen-reader, and printed-shift-sheet checks completed
 - [ ] Backup schedule + off-host storage configured and tested
 - [ ] On-call / incident contact assigned
+
+## 19. Netlify (frontend-only)
+
+Netlify hosts the static React SPA only. It cannot run the FastAPI backend (Functions supports
+JS/TS/Go, not Python/FastAPI + PostgreSQL + Alembic), so a functional deployment needs the API on a
+separate container host and `VITE_API_URL` pointing at it. Without an API the UI still loads and
+runs with offline empty states (no bundled sample figures).
+
+Config in the repo:
+
+- `netlify.toml` — build command `npm run build`, publish `dist`, Node 24.
+- `public/_headers` — CSP, HSTS, nosniff, frame denial, asset caching. Copied to `dist/` so it also
+  applies to manual and CLI deploys.
+- `public/_redirects` — SPA fallback (`/*` → `/index.html`, status 200). Routing is hash-based
+  today, so this is only a safety net.
+
+### Deploy
+
+```bash
+npm ci
+npm run build                       # tsc -b && vite build → dist/
+
+# Option A — drag and drop: upload the dist/ folder at https://app.netlify.com/drop
+# Option B — CLI (use the publish dir so _headers/_redirects ship with it)
+npx netlify-cli deploy --dir=dist          # draft URL first
+npx netlify-cli deploy --dir=dist --prod   # promote to production
+```
+
+### Connect the API
+
+`VITE_API_URL` is baked into the bundle at build time; changing it requires a rebuild/redeploy.
+
+```bash
+npx netlify-cli env:set VITE_API_URL https://api.example.com
+npx netlify-cli build && npx netlify-cli deploy --dir=dist --prod
+```
+
+Then on the API host:
+
+- Add the Netlify origin to `CORS_ORIGINS` (exact origin, https in production), e.g.
+  `https://<site>.netlify.app`. Deploy previews and branch deploys use different hostnames — add
+  those too if they need API access.
+- Keep `ENVIRONMENT=production` guards satisfied (https origins, non-SQLite database, strong DB
+  password, empty seed PIN).
+
+Notes:
+
+- Never put secrets in `VITE_*` variables — they are inlined into the public bundle.
+- The CSP in `public/_headers` allows `connect-src https:` so any HTTPS API works out of the box;
+  tighten it to the API origin once it is fixed.
+- The site is HTTPS-only, so an `http://` API URL is blocked as mixed content and the UI stays
+  offline (empty states, sign-in unavailable).

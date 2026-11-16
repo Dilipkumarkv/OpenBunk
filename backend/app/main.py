@@ -17,7 +17,7 @@ logger = get_logger("openbunk.main")
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="OpenBunk API",
+        title="DeepBNK API",
         version="0.9.1",
         docs_url="/api/docs" if not settings.is_production else None,
         openapi_url="/api/openapi.json" if not settings.is_production else None,

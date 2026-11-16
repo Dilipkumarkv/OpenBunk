@@ -5,9 +5,7 @@ import App from './App'
 describe('App', () => {
   it('renders the dashboard route with navigation', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /Good (morning|afternoon|evening), Deep/,
-    )
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Station overview')
     expect(screen.getByRole('link', { name: /Shift & readings/i })).toHaveAttribute(
       'href',
       '#/shifts',

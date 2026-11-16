@@ -3,13 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/authContext'
 import { getJson } from '../lib/api'
 import { money } from '../lib/format'
-import {
-  collectionBreakdown,
-  demoAlerts,
-  recentTransactions,
-  salesTrend,
-  shiftStatus,
-} from '../data/sampleData'
+import { STATION } from '../config/station'
 
 interface ApiTransaction {
   id: string
@@ -120,7 +114,7 @@ export default function Dashboard() {
           })),
         })
       } catch {
-        /* API unreachable — isLive derivation keeps demo data */
+        /* API unreachable — the page shows empty states until data loads */
       }
     })()
     return () => {
@@ -131,9 +125,11 @@ export default function Dashboard() {
   const isLive = Boolean(
     session && live.owner === session.employee.code && live.transactions !== null,
   )
-  const txnList: TxnRow[] =
-    isLive && live.transactions ? live.transactions : [...recentTransactions]
-  const mixList = isLive && live.collections ? live.collections : [...collectionBreakdown]
+  const station = session
+    ? { name: session.station.name, code: session.station.code }
+    : { name: STATION.name, code: STATION.code }
+  const txnList: TxnRow[] = isLive && live.transactions ? live.transactions : []
+  const mixList = isLive && live.collections ? live.collections : []
 
   const q = txnQuery.trim().toLowerCase()
   const visibleTransactions = txnList.filter((txn) =>
@@ -144,34 +140,28 @@ export default function Dashboard() {
           .includes(q),
   )
 
-  const salesValue = isLive && live.salesTotal !== null ? money(live.salesTotal) : '₹ 2,84,650'
+  const salesValue = isLive && live.salesTotal !== null ? money(live.salesTotal) : '—'
   const litresValue =
-    isLive && live.litresTotal !== null ? live.litresTotal.toLocaleString('en-IN') : '3,842.6'
-  const litresDetail = isLive
-    ? (live.litresSplit ?? 'From closed shifts')
-    : 'Petrol 1,624 L · Diesel 2,219 L'
-  const cashValue = isLive
-    ? live.cashCollected !== null
-      ? money(live.cashCollected)
-      : '—'
-    : '₹ 96,420'
-  const cashShare = isLive
-    ? live.cashCollected !== null && live.salesTotal
+    isLive && live.litresTotal !== null ? live.litresTotal.toLocaleString('en-IN') : '—'
+  const litresDetail = isLive ? (live.litresSplit ?? 'From closed shifts') : 'No sales recorded'
+  const cashValue = isLive && live.cashCollected !== null ? money(live.cashCollected) : '—'
+  const cashShare =
+    isLive && live.cashCollected !== null && live.salesTotal
       ? `${((live.cashCollected / live.salesTotal) * 100).toFixed(1)}% of sales`
       : 'No cash collections recorded today'
-    : '33.9% of sales'
+  const heroEyebrow = `${isLive ? 'Live' : 'Offline'} · ${station.code}`
 
   return (
     <>
       <div className="heading">
         <div>
           <h1>
-            {greeting()}, {session?.employee.name.split(' ')[0] ?? 'Deep'}
+            {session ? `${greeting()}, ${session.employee.name.split(' ')[0]}` : 'Station overview'}
           </h1>
           <div className="sub">
             {session
               ? `Station ${session.station.code} · signed in as ${session.employee.code} (${session.employee.role})`
-              : "Here's what's happening at your station today."}
+              : `${station.name} · sign in to load live station data.`}
           </div>
         </div>
         <div className="actions">
@@ -184,54 +174,35 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="notice">
-        ⓘ <b>{isLive ? 'Live:' : session ? 'Offline:' : 'Demo data:'}</b>{' '}
-        {isLive
-          ? 'Figures below come from the OpenBunk API (closed shifts and recorded sales only).'
-          : session
-            ? 'Signed in but backend not reachable (or no data yet) — showing illustrative sample data.'
-            : 'All figures below are illustrative. This prototype does not connect to a dispenser, payment gateway, or live database.'}
-      </div>
+      {!isLive && (
+        <div className="notice">
+          ⓘ <b>Offline:</b>{' '}
+          {session
+            ? 'backend not reachable or no data recorded yet — figures appear after the station saves to the server.'
+            : 'sign in to load sales, collections and shift data from the station.'}
+        </div>
+      )}
 
-      <div className="grid stats">
-        <div className="card">
-          <div className="stat-top">
-            Today's sales <span className="stat-icon">₹</span>
-          </div>
-          <div className="value">{salesValue}</div>
-          <div className="delta">
-            {isLive ? (
-              <span className="live-tag">● Live</span>
-            ) : (
-              <>
-                ↑ 8.4% <span className="muted">vs yesterday</span>
-              </>
-            )}
+      <div className="hero">
+        <div>
+          <span className="hero-eyebrow">{heroEyebrow}</span>
+          <div className="hero-value">{salesValue}</div>
+          <div className="hero-sub">
+            {isLive ? 'Closed shifts and recorded sales only' : 'No sales recorded today'}
           </div>
         </div>
-        <div className="card">
-          <div className="stat-top">
-            Fuel dispensed <span className="stat-icon">⛽</span>
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <b>{litresValue} L</b>
+            <span>{litresDetail}</span>
           </div>
-          <div className="value">
-            {litresValue} <small className="unit">L</small>
+          <div className="hero-stat">
+            <b>{cashValue}</b>
+            <span>{cashShare}</span>
           </div>
-          <div className="delta">{litresDetail}</div>
-        </div>
-        <div className="card">
-          <div className="stat-top">
-            Cash collected <span className="stat-icon">₹</span>
-          </div>
-          <div className="value">{cashValue}</div>
-          <div className="delta">{cashShare}</div>
-        </div>
-        <div className="card">
-          <div className="stat-top">
-            Credit outstanding <span className="stat-icon">↗</span>
-          </div>
-          <div className="value">{isLive ? '—' : '₹ 1,42,800'}</div>
-          <div className="delta warn">
-            {isLive ? 'No API endpoint yet' : '12 customers · Due follow-up'}
+          <div className="hero-stat">
+            <b>—</b>
+            <span>Credit dues are on the Credit ledger</span>
           </div>
         </div>
       </div>
@@ -239,87 +210,36 @@ export default function Dashboard() {
       <div className="card" style={{ marginTop: 16 }}>
         <div className="cardhead">
           <h3>Collection mix today</h3>
-          <span className="small">{isLive ? 'Live · API' : 'Demo data'}</span>
+          <span className="small">{isLive ? 'Live · API' : 'No data yet'}</span>
         </div>
-        <div className="kpirow">
-          {mixList.map((row) => (
-            <div className="kpi" key={row.mode}>
-              <span>{row.mode}</span>
-              <b>{row.amount}</b>
-              <span className="small">{row.share} of collections</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="card alerts" style={{ marginTop: 16 }}>
-        <div className="cardhead">
-          <h3>Alerts</h3>
-          <span className="small">Demo data · {demoAlerts.length} open</span>
-        </div>
-        <ul className="alertlist">
-          {demoAlerts.map((alert) => (
-            <li key={alert.text}>
-              <span className={`pill ${alert.tone}`}>!</span>
-              <span>{alert.text}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="grid two" style={{ marginTop: 16 }}>
-        <div className="card">
-          <div className="cardhead">
-            <h3>Sales trend</h3>
-            <span className="small">Sample chart · no API history yet</span>
-          </div>
-          <div className="barwrap">
-            {salesTrend.map((bar) => (
-              <div className="barcol" key={bar.day}>
-                <div
-                  className={'today' in bar && bar.today ? 'bar today' : 'bar'}
-                  style={{ height: `${bar.height}%` }}
-                />
-                <span className="barlabel">{bar.day}</span>
+        {mixList.length > 0 ? (
+          <div className="kpirow">
+            {mixList.map((row) => (
+              <div className="kpi" key={row.mode}>
+                <span>{row.mode}</span>
+                <b>{row.amount}</b>
+                <span className="small">{row.share} of collections</span>
               </div>
             ))}
           </div>
-          <div className="legend">
-            <span>
-              <i className="dot" />
-              Daily sales
-            </span>
-            <span>Today highlighted</span>
-          </div>
-        </div>
+        ) : (
+          <p className="small">No collections recorded today.</p>
+        )}
+      </div>
 
-        <div className="card">
-          <div className="cardhead">
-            <h3>Shift status</h3>
-            <span className={isLive ? 'pill blue' : 'pill green'}>
-              {isLive ? 'Sample' : 'Demo sample'}
-            </span>
-          </div>
-          {isLive ? (
-            <p className="small" style={{ marginBottom: 10 }}>
-              Live drafts and closed shifts are on the Shift &amp; readings page. This dashboard
-              card is illustrative and is not loaded from the API.
-            </p>
-          ) : (
-            shiftStatus.map((shift) => (
-              <div className="shift-row" key={shift.name}>
-                <div>
-                  <b>{shift.name}</b>
-                  <div className="small">{shift.meta}</div>
-                </div>
-                <span className={`pill ${shift.tone}`}>{shift.status}</span>
-              </div>
-            ))
-          )}
-          <Link to="/shifts" className="btn block">
-            View shift register →
-          </Link>
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="cardhead">
+          <h3>Shift status</h3>
+          <span className={isLive ? 'pill blue' : 'pill amber'}>
+            {isLive ? 'Live' : 'No data yet'}
+          </span>
         </div>
+        <p className="small" style={{ marginBottom: 10 }}>
+          Open drafts and closed shifts are on the Shift &amp; readings page.
+        </p>
+        <Link to="/shifts" className="btn block">
+          View shift register →
+        </Link>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
@@ -364,25 +284,17 @@ export default function Dashboard() {
               {visibleTransactions.length === 0 && (
                 <tr>
                   <td colSpan={5} className="emptyhint">
-                    {isLive
-                      ? 'No transactions recorded yet — close a shift or record a sale.'
-                      : `No transactions match “${txnQuery}”.`}
+                    {!session
+                      ? 'Sign in to see recent sales.'
+                      : txnList.length === 0
+                        ? 'No transactions recorded yet — close a shift or record a sale.'
+                        : `No transactions match “${txnQuery}”.`}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        {session && !isLive && (
-          <p className="small" style={{ marginTop: 10 }}>
-            Sample data — backend unreachable or nothing recorded yet.
-          </p>
-        )}
-        {!session && (
-          <p className="small" style={{ marginTop: 10 }}>
-            Sample transactions — sign in to see live sales.
-          </p>
-        )}
       </div>
     </>
   )

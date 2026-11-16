@@ -3,7 +3,6 @@ import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { getJson, request, ApiHttpError, ApiOfflineError } from '../lib/api'
 import { money } from '../lib/format'
-import { creditAccounts } from '../data/sampleData'
 import { CREDIT_STATUS_LABEL, CREDIT_STATUS_TONE, creditLimitStatus } from '../domain/credit'
 
 interface ApiCustomer {
@@ -75,7 +74,7 @@ export default function Credit() {
           }),
         })
       } catch {
-        /* API unreachable — falls back to sample data */
+        /* API unreachable — the page shows empty states until data loads */
       }
     })()
     return () => {
@@ -84,7 +83,11 @@ export default function Credit() {
   }, [session, refreshKey])
 
   const isLive = Boolean(session && live && live.owner === session.employee.code)
-  const rows: CreditRow[] = isLive && live ? live.rows : [...creditAccounts]
+  const rows: CreditRow[] = isLive && live ? live.rows : []
+  const outstandingTotal = rows.reduce(
+    (s, r) => s + Number(r.outstanding.replace(/[^\d.-]/g, '')),
+    0,
+  )
 
   const q = query.trim().toLowerCase()
   const visible = rows.filter((account) =>
@@ -138,7 +141,10 @@ export default function Credit() {
           <div className="sub">Customer balances and account activity.</div>
         </div>
         <div className="actions">
-          <button className="btn primary" onClick={() => toast('New customer form (prototype).')}>
+          <button
+            className="btn primary"
+            onClick={() => toast('New customer entry is not available yet.')}
+          >
             ＋ Add customer
           </button>
         </div>
@@ -191,32 +197,30 @@ export default function Credit() {
       <div className="grid stats">
         <div className="card">
           <div className="stat-top">Total outstanding</div>
-          <div className="value">
-            {isLive
-              ? money(rows.reduce((s, r) => s + Number(r.outstanding.replace(/[^\d.-]/g, '')), 0))
-              : '₹ 1,42,800'}
-          </div>
+          <div className="value">{isLive ? money(outstandingTotal) : '—'}</div>
           <div className="small">
-            {isLive ? `${rows.length} account(s) · live` : 'Across 12 active accounts'}
+            {isLive ? `${rows.length} account(s) · live` : 'Sign in to load balances'}
           </div>
         </div>
         <div className="card">
           <div className="stat-top">Overdue</div>
-          <div className="value">{isLive ? '—' : '₹ 28,400'}</div>
+          <div className="value">—</div>
           <div className="delta danger">
-            {isLive ? 'Not calculated by the API yet' : '4 accounts need follow-up'}
+            {isLive ? 'Not calculated by the API yet' : 'Sign in to load balances'}
           </div>
         </div>
         <div className="card">
           <div className="stat-top">Credit sales today</div>
-          <div className="value">{isLive ? '—' : '₹ 18,650'}</div>
-          <div className="small">{isLive ? 'Not aggregated by the API yet' : '7 transactions'}</div>
+          <div className="value">—</div>
+          <div className="small">
+            {isLive ? 'Not aggregated by the API yet' : 'Sign in to load credit sales'}
+          </div>
         </div>
         <div className="card">
           <div className="stat-top">Collections today</div>
-          <div className="value">{isLive ? '—' : '₹ 12,000'}</div>
+          <div className="value">—</div>
           <div className="delta">
-            {isLive ? 'See the Reports page for collections' : '3 receipts'}
+            {isLive ? 'See the Reports page for collections' : 'Sign in to load collections'}
           </div>
         </div>
       </div>
@@ -264,8 +268,12 @@ export default function Credit() {
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={7} className="emptyhint">
-                    {isLive
-                      ? 'No customers yet — import a CSV above.'
+                    {rows.length === 0
+                      ? isLive
+                        ? 'No customers yet — import a CSV above.'
+                        : session
+                          ? 'No customers loaded.'
+                          : 'Sign in to load customer balances.'
                       : `No customers match “${query}”.`}
                   </td>
                 </tr>
@@ -273,11 +281,6 @@ export default function Credit() {
             </tbody>
           </table>
         </div>
-        {!isLive && (
-          <p className="small" style={{ marginTop: 10 }}>
-            Sample data — sign in to see live balances and import.
-          </p>
-        )}
       </div>
     </>
   )

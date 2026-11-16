@@ -1,4 +1,4 @@
-# OpenBunk — Permission Matrix (Phase 05)
+# DeepBNK — Permission Matrix (Phase 05)
 
 Server-side enforced. UI hiding is never authorization. `/audit` lists `owner` + `auditor` only.
 Any access outside this matrix returns 403 (or 404 for foreign-station resources, by design).

@@ -1,4 +1,4 @@
-# OpenBunk — Domain Model
+# DeepBNK — Domain Model
 
 Status: v0.1 (prototype; documents intended production semantics. Persistence arrives in Phase 04+.)
 Scope: one station initially; design for future multi-station support without implementing it.

@@ -20,8 +20,7 @@ import { money } from '../lib/format'
 // - "Validate readings" is strict: empty/negative/closing<opening/missing price
 //   are reported as human-readable issues, inline.
 // When signed in, Save/Validate/Close round-trip the backend (server is authoritative).
-// When signed out the same form runs against a clearly-labelled demo catalog and
-// never claims that anything was written.
+// When signed out the nozzle catalog stays empty; the page asks the user to sign in.
 
 type ShiftKind = 'morning' | 'afternoon' | 'night'
 
@@ -108,33 +107,6 @@ interface ClosedInfo {
   reconciliation: string
 }
 
-const DEMO_CATALOG: NozzleRow[] = [
-  {
-    id: 'demo-p1',
-    label: 'P1',
-    productId: 'demo-petrol',
-    productCode: 'petrol',
-    productName: 'Petrol',
-    unitPrice: '102.50',
-  },
-  {
-    id: 'demo-p2',
-    label: 'P2',
-    productId: 'demo-petrol',
-    productCode: 'petrol',
-    productName: 'Petrol',
-    unitPrice: '102.50',
-  },
-  {
-    id: 'demo-d1',
-    label: 'D1',
-    productId: 'demo-diesel',
-    productCode: 'diesel',
-    productName: 'Diesel',
-    unitPrice: '89.50',
-  },
-]
-
 const EMPTY_COLLECTIONS: Record<string, string> = { cash: '', upi: '', card: '', other: '' }
 const EMPTY_ROLLOVER: RolloverInputs = {
   petrol: { authorized: false, value: '100000' },
@@ -162,7 +134,9 @@ export default function Shifts() {
   const { session } = useAuth()
 
   const [catalog, setCatalog] = useState<NozzleRow[]>([])
-  const [catalogMode, setCatalogMode] = useState<'loading' | 'demo' | 'live' | 'error'>('loading')
+  const [catalogMode, setCatalogMode] = useState<'loading' | 'signed-out' | 'live' | 'error'>(
+    'loading',
+  )
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [shift, setShift] = useState<ShiftDetail | null>(null)
   const [shiftKind, setShiftKind] = useState<ShiftKind>('afternoon')
@@ -197,7 +171,7 @@ export default function Shifts() {
 
   const draftScope = useCallback(
     (date: string, kind: string) => {
-      if (!session) return 'demo'
+      if (!session) return 'guest'
       return `${session.station.code}:${session.employee.code}:${date}:${kind}`
     },
     [session],
@@ -220,16 +194,14 @@ export default function Shifts() {
     setCatalogError(null)
 
     if (!session) {
-      setCatalog(DEMO_CATALOG)
-      setCatalogMode('demo')
+      setCatalog([])
+      setCatalogMode('signed-out')
       setShift(null)
       setShiftKind('afternoon')
       setReadings({})
       setCollections(EMPTY_COLLECTIONS)
       setRollover(EMPTY_ROLLOVER)
       setDraftRestoredAt(null)
-      const local = loadShiftDraft(sessionStorage, 'demo')
-      if (local) applyDraft(local)
       setReady(true)
       return
     }
@@ -563,7 +535,7 @@ export default function Shifts() {
 
   const onSaveDraft = async () => {
     if (!session) {
-      toast('Demo only: the draft stays in this browser and is not saved to any server.')
+      toast('Sign in to save readings to the server.')
       return
     }
     if (!editable) {
@@ -614,7 +586,7 @@ export default function Shifts() {
       return
     }
     if (!session) {
-      toast('Local demo validation passed. No server call was made.')
+      toast('Sign in to validate readings against the server.')
       return
     }
     if (!editable) {
@@ -871,10 +843,9 @@ export default function Shifts() {
       </div>
 
       <div className="notice">
-        {catalogMode === 'demo' ? (
+        {catalogMode === 'signed-out' ? (
           <>
-            ⓘ <b>Demo preview:</b> sample nozzles and prices. Nothing on this page is sent to a
-            server.
+            ⓘ <b>Not signed in:</b> sign in to load the station catalog, prices and shifts.
           </>
         ) : catalogMode === 'loading' ? (
           <>ⓘ Loading the station catalog from the server…</>
@@ -884,8 +855,8 @@ export default function Shifts() {
           </>
         ) : (
           <>
-            ⓘ <b>Live:</b> readings and closes are saved to the OpenBunk API. Prices are configured
-            on the server and cannot be typed here.
+            ⓘ <b>Live:</b> readings and closes are saved to the server. Prices are configured on the
+            server and cannot be typed here.
           </>
         )}
       </div>
@@ -980,9 +951,7 @@ export default function Shifts() {
           <div className="field">
             <div className="stat-top">Attendant</div>
             <div>
-              {session
-                ? `${session.employee.name} (${session.employee.code})`
-                : 'Demo operator (not signed in)'}
+              {session ? `${session.employee.name} (${session.employee.code})` : 'Not signed in'}
             </div>
           </div>
           <div className="field">
@@ -1187,27 +1156,16 @@ export default function Shifts() {
             Validate readings
           </button>
           {!isClosed &&
-            (session ? (
-              canClose ? (
-                <button
-                  className="btn"
-                  onClick={openCloseDialog}
-                  disabled={busy || catalog.length === 0}
-                >
-                  Close shift
-                </button>
-              ) : (
-                <span className="small">Closing requires an owner or manager.</span>
-              )
-            ) : (
+            (canClose ? (
               <button
                 className="btn"
-                onClick={() =>
-                  toast('Demo only: sign in as an owner or manager to close a shift on the server.')
-                }
+                onClick={openCloseDialog}
+                disabled={busy || catalog.length === 0 || !session}
               >
                 Close shift
               </button>
+            ) : (
+              <span className="small">Closing requires an owner or manager.</span>
             ))}
           {isClosed && (
             <button className="btn" onClick={() => window.location.reload()}>
@@ -1223,16 +1181,17 @@ export default function Shifts() {
             <div className="stat-top">{product.name}</div>
             <div className="value">{product.volume.toLocaleString('en-IN')} L</div>
             <div className="delta">{money(product.value)}</div>
-            <div className="small">
-              {product.nozzles.join(', ')} · volume × server price
-              {catalogMode === 'demo' ? ' · demo sample' : ''}
-            </div>
+            <div className="small">{product.nozzles.join(', ')} · volume × server price</div>
           </div>
         ))}
         {productTotals.length === 0 && (
           <div className="card">
             <div className="stat-top">No readings yet</div>
-            <div className="small">Load the catalog or enter nozzle readings to see totals.</div>
+            <div className="small">
+              {catalogMode === 'signed-out'
+                ? 'Sign in to load the station catalog.'
+                : 'Load the catalog or enter nozzle readings to see totals.'}
+            </div>
           </div>
         )}
       </div>

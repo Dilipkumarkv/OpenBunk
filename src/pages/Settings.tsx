@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { request } from '../lib/api'
+import { STATION } from '../config/station'
 
 export default function Settings() {
   const toast = useToast()
@@ -36,10 +37,10 @@ export default function Settings() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'openbunk-export.json'
+      a.download = 'deepbnk-export.json'
       a.click()
       URL.revokeObjectURL(url)
-      toast('Station export downloaded (openbunk-export.json).')
+      toast('Station export downloaded (deepbnk-export.json).')
     } catch {
       toast('Backend not reachable — export not possible.')
     } finally {
@@ -71,13 +72,17 @@ export default function Settings() {
           <div className="kpi">
             <span>Signed in</span>
             <b>
-              {session ? `${session.employee.name} (${session.employee.role})` : 'No — demo mode'}
+              {session
+                ? `${session.employee.name} (${session.employee.role})`
+                : 'No — not signed in'}
             </b>
           </div>
           <div className="kpi">
             <span>Station</span>
             <b>
-              {session ? `${session.station.code} · ${session.station.name}` : 'Demo / Sample data'}
+              {session
+                ? `${session.station.code} · ${session.station.name}`
+                : `${STATION.code} · ${STATION.name}`}
             </b>
           </div>
         </div>
@@ -105,18 +110,15 @@ export default function Settings() {
         <div className="formgrid">
           <div className="field">
             <label htmlFor="station-name">Station name</label>
-            <input
-              id="station-name"
-              defaultValue={session?.station.name ?? 'OpenBunk Demo Station'}
-            />
+            <input id="station-name" defaultValue={session?.station.name ?? STATION.name} />
           </div>
           <div className="field">
             <label htmlFor="station-code">Station code</label>
-            <input id="station-code" defaultValue={session?.station.code ?? 'OB-001'} />
+            <input id="station-code" defaultValue={session?.station.code ?? STATION.code} />
           </div>
           <div className="field">
             <label htmlFor="address">Address</label>
-            <input id="address" defaultValue="Melkote, Karnataka" />
+            <input id="address" defaultValue={STATION.address} />
           </div>
           <div className="field">
             <label htmlFor="timezone">Timezone</label>
@@ -141,7 +143,7 @@ export default function Settings() {
         <div className="formactions">
           <button
             className="btn primary"
-            onClick={() => toast('Demo only: station profile is not persisted from this form yet.')}
+            onClick={() => toast('Station profile editing is not available yet.')}
           >
             Save settings
           </button>
@@ -183,11 +185,11 @@ export default function Settings() {
         <div className="kpirow">
           <div className="kpi">
             <span>Version</span>
-            <b>0.6 · Integrated prototype</b>
+            <b>0.7 · Station operations</b>
           </div>
           <div className="kpi">
             <span>Environment</span>
-            <b>{online ? 'Backend reachable' : 'Demo / Offline'}</b>
+            <b>{online ? 'Backend reachable' : 'Offline'}</b>
           </div>
           <div className="kpi">
             <span>Persistence</span>

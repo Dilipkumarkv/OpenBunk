@@ -7,7 +7,7 @@ beforeEach(() => {
   window.location.hash = '#/'
 })
 
-describe('UI: navigation and core flows (demo mode)', () => {
+describe('UI: navigation and core flows', () => {
   it('navigates between all main screens via the sidebar', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('link', { name: 'Shift & readings' }))
@@ -23,28 +23,22 @@ describe('UI: navigation and core flows (demo mode)', () => {
     expect(screen.getByRole('heading', { name: 'Reports' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: 'Dashboard' }))
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      /Good (morning|afternoon|evening), Deep/,
-    )
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Station overview')
   })
 
-  it('shows an inline validation error when closing is below opening', async () => {
+  it('shows empty states and sign-in guidance when no data is loaded', async () => {
     render(<App />)
     fireEvent.click(screen.getByRole('link', { name: 'Shift & readings' }))
-    fireEvent.change(await screen.findByLabelText('Petrol P1 opening (L)'), {
-      target: { value: '12450' },
-    })
-    const closing = screen.getByLabelText('Petrol P1 closing (L)')
-    fireEvent.change(closing, { target: { value: '12000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Validate readings' }))
-    expect(await screen.findByText(/closing is below opening/i)).toBeInTheDocument()
-    expect(closing).toHaveAttribute('aria-invalid', 'true')
+
+    expect(await screen.findByText(/Not signed in:/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Petrol P1 opening (L)')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Close shift' })).toBeDisabled()
   })
 
-  it('has an accessible main region and labeled form controls', async () => {
+  it('has an accessible main region, labeled controls and a station profile', () => {
     render(<App />)
     expect(screen.getAllByRole('main').length).toBeGreaterThanOrEqual(1)
-    // every nav link and the station-settings link have accessible names
     for (const name of [
       'Dashboard',
       'Shift & readings',
@@ -54,15 +48,15 @@ describe('UI: navigation and core flows (demo mode)', () => {
     ]) {
       expect(screen.getByRole('link', { name })).toBeInTheDocument()
     }
-    fireEvent.click(screen.getByRole('link', { name: 'Shift & readings' }))
-    expect(await screen.findByLabelText('Petrol P1 opening (L)')).toBeInTheDocument()
-    expect(screen.getAllByText(/Server price ₹102.50\/L/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Close shift' })).toBeInTheDocument()
+    expect(screen.getByText('DeepBNK Station')).toBeInTheDocument()
+    expect(screen.getByText('OB-001')).toBeInTheDocument()
+    expect(screen.getByText('Melkote, Karnataka')).toBeInTheDocument()
   })
 
-  it('shows clearly-labeled demo data when not signed in', () => {
+  it('shows the DeepBNK brand and offline status when not signed in', () => {
     render(<App />)
-    expect(screen.getAllByText(/Demo data:/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('DeepBNK').length).toBeGreaterThan(0)
+    expect(screen.getByText('● Offline')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
   })
 })

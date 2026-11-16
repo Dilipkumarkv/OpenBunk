@@ -61,7 +61,7 @@ def export_csv(
         for s in db.query(Sale).filter(Sale.station_id == sid).order_by(Sale.created_at).all():
             rows.append([s.id, s.created_at.isoformat(timespec="seconds"), s.tender, s.volume_litres, s.unit_price, s.amount])
         db.commit()
-        return _csv_response("openbunk-sales.csv", rows)
+        return _csv_response("deepbnk-sales.csv", rows)
 
     if type == "collections":
         rows = [["date", "mode", "amount"]]
@@ -75,7 +75,7 @@ def export_csv(
         for day, mode, amount in grouped:
             rows.append([day, mode, round2(amount or Decimal("0"))])
         db.commit()
-        return _csv_response("openbunk-collections.csv", rows)
+        return _csv_response("deepbnk-collections.csv", rows)
 
     if type == "credit-ledger":
         rows = [["created_at", "account_code", "customer", "type", "amount", "reason"]]
@@ -88,7 +88,7 @@ def export_csv(
         for entry, customer in query.all():
             rows.append([entry.created_at.isoformat(timespec="seconds"), customer.account_code, customer.name, entry.type, entry.amount, entry.reason or ""])
         db.commit()
-        return _csv_response("openbunk-credit-ledger.csv", rows)
+        return _csv_response("deepbnk-credit-ledger.csv", rows)
 
     # shifts (with readings)
     rows = [["business_date", "kind", "status", "revenue_total", "readings"]]
@@ -100,7 +100,7 @@ def export_csv(
     for s in shifts:
         rows.append([s.business_date, s.kind, s.status, s.revenue_total, by_shift.get(s.id, 0)])
     db.commit()
-    return _csv_response("openbunk-shifts.csv", rows)
+    return _csv_response("deepbnk-shifts.csv", rows)
 
 
 def _parse_customer_row(row: dict) -> tuple[dict | None, str | None]:

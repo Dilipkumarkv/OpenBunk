@@ -8,7 +8,7 @@ import {
 } from './shift'
 
 describe('computeShiftTotals', () => {
-  it('computes volumes and values from prototype defaults', () => {
+  it('computes volumes and values from default inputs', () => {
     const totals = computeShiftTotals({
       petrolOpening: 12450,
       petrolClosing: 12780,

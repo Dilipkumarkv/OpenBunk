@@ -1,11 +1,11 @@
 /**
- * OpenBunk API client (Phase 06).
+ * DeepBNK API client (Phase 06).
  *
  * - Base URL from VITE_API_URL (default http://localhost:8000)
  * - Tokens in sessionStorage (tab-scoped, never in localStorage/repo)
  * - Access token auto-refreshed single-flight on expiry; one retry after 401
  * - Every request has a 5s timeout; network failure throws ApiOfflineError
- *   so callers can fall back to clearly-labeled demo data.
+ *   so callers can show an offline state.
  */
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000'
@@ -13,7 +13,7 @@ const TOKEN_KEY = 'openbunk.tokens.v1'
 const HEALTH_KEY = 'openbunk.online.v1'
 
 export class ApiOfflineError extends Error {
-  constructor(message = 'OpenBunk backend is not reachable') {
+  constructor(message = 'DeepBNK backend is not reachable') {
     super(message)
     this.name = 'ApiOfflineError'
   }

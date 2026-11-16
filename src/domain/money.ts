@@ -1,7 +1,7 @@
 /**
  * Money rounding policy (see docs/calculations.md):
  * - Persisted currency will use integer minor units (paise) / decimal arithmetic.
- * - Prototype UI computes in floats but rounds half-up to 2 dp at value boundaries,
+ * - UI computes in floats but rounds half-up to 2 dp at value boundaries,
  *   so no fractional-paise drift surfaces in the UI.
  */
 

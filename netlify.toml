@@ -1,0 +1,26 @@
+# Netlify configuration — frontend (React + Vite SPA) only.
+#
+# The FastAPI backend under backend/ cannot run on Netlify (Netlify Functions
+# support JS/TS/Go, not Python/FastAPI + PostgreSQL). Host the API elsewhere and
+# point VITE_API_URL at it, or leave it unset and the UI runs with offline
+# empty states (no bundled sample data).
+#
+# Routing and security headers live in public/_headers and public/_redirects so
+# they are copied into dist/ and apply to both Git builds and manual/CLI
+# deploys of a prebuilt folder.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Must match the version used by CI. VITE_API_URL is deliberately not set
+  # here: set it in the Netlify UI/CLI per site (values are baked in at build
+  # time, so every change needs a redeploy).
+  NODE_VERSION = "24"
+
+[dev]
+  framework = "#custom"
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888

@@ -50,3 +50,6 @@ backend/*.db
 backend/openbunk.db
 .pytest_cache/
 
+
+# Local Netlify folder
+.netlify

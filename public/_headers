@@ -1,0 +1,28 @@
+# Netlify response headers for the static frontend.
+#
+# Content-Security-Policy notes:
+# - style-src allows 'unsafe-inline' because React writes style attributes.
+# - connect-src allows https: so the SPA can reach an externally hosted API;
+#   tighten it to your API origin (e.g. https://api.example.com) once fixed.
+# - There are no third-party scripts/fonts/images.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; worker-src 'self'; manifest-src 'self'; font-src 'self'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# The HTML shell must revalidate so a new deploy is picked up immediately.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Vite emits content-hashed assets; cache them forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Install prompts expect the manifest as JSON, not octet-stream.
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=0, must-revalidate

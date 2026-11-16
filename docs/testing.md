@@ -1,4 +1,4 @@
-# OpenBunk — Testing & Quality Gates
+# DeepBNK — Testing & Quality Gates
 
 ## Test pyramid (as implemented)
 
@@ -38,9 +38,14 @@
 
 ### UI (`src/*.ui.test.tsx` — 4 tests, Testing Library, jsdom)
 
-- navigation across all screens with accessible names; labeled form controls; `<main>` landmark
-- inline validation error wiring (closing < opening → `aria-invalid` + message)
-- demo-mode labeling renders correctly with no session
+- navigation across all screens with accessible names; labeled controls; `<main>` landmark
+- station profile strip renders name, code and address under the top bar
+- signed-out empty states: the Shift page asks for sign-in, no nozzle inputs render, and Save
+  draft / Close shift are disabled
+- brand and **● Offline** status render with no session
+
+Inline validation wiring (closing < opening → `aria-invalid` + message) is covered by the domain
+validation tests; the UI path needs a live catalog, so it is verified manually against the API.
 
 ### End-to-end (API-level + manual browser verification)
 

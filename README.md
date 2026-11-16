@@ -1,19 +1,33 @@
-# OpenBunk
+# DeepBNK
 
-OpenBunk is a prototype for **assisted meter entry** for building operators. It is being built in
-phases; this repository currently contains the **repository foundation only** — an empty,
-installable, fully checked React + TypeScript + Vite app. Business features land in later phases
-(see `STATUS.md`).
+DeepBNK is a station operations app for fuel bunks: assisted meter entry and shift closing, fuel
+stock, credit ledger and daily reports. It ships as an installable, offline-capable PWA and talks
+to the FastAPI backend in `backend/`.
+
+## Features
+
+- Dashboard with today's sales, cash collections and recent transactions, loaded from the API
+- Shift closing: meter readings, server-configured prices, collections reconciliation, PIN
+  re-authentication and authorized rollover
+- Fuel stock: tank register (book stock) and fuel receipts
+- Credit ledger with CSV import (validate-only dry run, then commit)
+- Daily sales and collections reports with PIN-protected CSV export
+- Station profile strip (name, code, address) under the top bar on every screen; data requires
+  sign-in
+- Installable PWA (manifest + service worker) that opens offline with the app shell
+
+The UI never bundles sample or test figures: until the API returns data you see empty states
+(`—`, "no data yet", and sign-in guidance).
 
 ## Stack
 
 - **Frontend:** React 19 + TypeScript + Vite
-- **Styling:** plain CSS (`src/index.css`) — one styling system, no framework yet
+- **Styling:** plain CSS design system (`src/index.css`) with self-hosted Plus Jakarta Sans
 - **Linting:** oxlint (React + TypeScript rules)
 - **Formatting:** Prettier
 - **Tests:** Vitest + Testing Library (jsdom)
-- **Backend (later phases):** Python + FastAPI + PostgreSQL
-- **Deployment (later phases):** Docker Compose
+- **Backend:** Python + FastAPI + PostgreSQL
+- **Deployment:** Docker Compose (full stack) or Netlify (frontend only)
 
 ## Prerequisites
 
@@ -26,7 +40,7 @@ installable, fully checked React + TypeScript + Vite app. Business features land
 
 ```bash
 git clone <repo-url>
-cd OpenBunk
+cd <repo-folder>
 npm ci          # deterministic install from package-lock.json
 npm run dev     # start the dev server (http://localhost:5173)
 ```
@@ -63,17 +77,17 @@ Dependencies are pinned to exact versions in `package.json`; `package-lock.json`
 ```bash
 docker compose up -d                   # db → one-shot migrate → api → web
 docker compose ps -a --format '{{.Service}} {{.ExitCode}}'   # migrate should show "0"
-docker compose exec api python -m app.seed   # demo station OB-001 (skip in production)
+docker compose exec api python -m app.seed   # development seed station OB-001 (skip in production)
 # open http://localhost:8080  → sign in with EMP-00 / the PIN in OPENBUNK_SEED_PIN (dev only)
 ```
 
 `OPENBUNK_SEED_PIN` is now empty by default — set a 6+ digit value (e.g. `246813`) before running
-the seed, or no demo employees are created. The web container binds `127.0.0.1:8080` only.
+the seed, or no seeded employees are created. The web container binds `127.0.0.1:8080` only.
 
 ## Backend (Phase 04)
 
-FastAPI + SQLAlchemy 2 + Alembic + Pydantic. The prototype UI is intentionally **not** wired to
-the API yet (that lands in Phase 06); the backend stands alone under `backend/`.
+FastAPI + SQLAlchemy 2 + Alembic + Pydantic under `backend/`. The SPA calls it through
+`VITE_API_URL` (default `http://localhost:8000`); the backend stands alone under `backend/`.
 
 ```bash
 cd backend
@@ -81,7 +95,7 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Windows; use bin/ on macOS/Linux
 # default DATABASE_URL is SQLite (./openbunk.db) — no server needed for local dev
 python -m alembic upgrade head                   # create/migrate schema (reversible)
-python -m app.seed                               # demo station OB-001 (demo PINs: 1234)
+python -m app.seed                               # development seed station OB-001 (set seed PIN first)
 python -m uvicorn app.main:app --reload          # http://127.0.0.1:8000  (docs at /api/docs)
 ```
 
@@ -112,8 +126,8 @@ API conventions (see `/api/docs` for the full OpenAPI schema):
   (12 h); argon2id PIN hashes; tokens stored as sha256; lockout after 5 failures (15 min);
   reuse of a refresh token burns the whole credential family. Permissions enforced server-side
   for 5 roles — see `docs/permissions.md`; sensitive actions require `X-Reauth-Pin`.
-  **Demo seed PIN (6+ digits) comes from `OPENBUNK_SEED_PIN` and is empty by default; production
-  refuses weak/default PINs. Never leave demo employees on a real station.**
+  **Development seed PIN (6+ digits) comes from `OPENBUNK_SEED_PIN` and is empty by default;
+  production refuses weak/default PINs. Never leave seeded employees on a real station.**
 - Structured error bodies: `{ "error": { "code", "message", "details", "requestId" } }`.
 - `X-Request-Id` on every response (echoed or generated); structured stdout logs.
 - List endpoints paginate (`limit`/`offset`, max 100) with totals.
@@ -129,15 +143,15 @@ API conventions (see `/api/docs` for the full OpenAPI schema):
 .github/workflows/ci.yml   # CI: lint, type-check, test, format check, build
 public/                    # static assets (favicon)
 src/
-  components/              # Layout (sidebar/topbar shell), Toast provider + context
-  data/sampleData.ts       # illustrative demo data — no real backend
+  components/              # Layout (sidebar/topbar/station strip), icons, auth + toast contexts
+  config/station.ts        # station profile shown in the strip (name, code, address)
   domain/                  # tested domain rules — no React/DOM: shift math & parsing,
-                           #   strict draft validation, collections reconciliation
-  lib/                     # format helpers (UI)
-  pages/                   # Dashboard, Shifts, Fuel, Credit, Reports, Settings
+                           #   strict draft validation, collections reconciliation, credit/stock
+  lib/                     # API client, offline shift drafts, format helpers
+  pages/                   # Dashboard, Shifts, Fuel, Credit, Reports, Settings, Login
   test/setup.ts            # Vitest setup (jest-dom matchers)
   App.tsx                  # routes (HashRouter)
-  main.tsx                 # entry point
+  main.tsx                 # entry point (fonts + styles)
 .env.example               # documented env vars; copy to .env (never commit .env)
 docs/domain-model.md       # entities, invariants, immutability rules
 docs/calculations.md       # formulas, examples, edge cases, rounding/rollover policy
@@ -146,6 +160,14 @@ STATUS.md                  # phase tracking — updated after every phase
 
 Routing uses `HashRouter` so the static build works on any file host (e.g. GitHub Pages)
 without SPA rewrite rules; switch to `BrowserRouter` if/when a rewrite-capable server exists.
+
+## Netlify (frontend only)
+
+`netlify.toml` plus `public/_headers` / `public/_redirects` are ready for a static deploy:
+`npm ci && npm run build`, then drag `dist/` to Netlify Drop or run
+`npx netlify-cli deploy --dir=dist --prod`. Netlify cannot host the FastAPI backend — set
+`VITE_API_URL` to an externally hosted API, or the UI runs with offline empty states. Full notes:
+[`docs/deployment.md` §19](./docs/deployment.md#19-netlify-frontend-only).
 
 ## CI
 

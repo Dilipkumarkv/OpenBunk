@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { getJson } from '../lib/api'
-import { fuelReceipts, tankRegister } from '../data/sampleData'
 
 interface ApiTank {
   id: string
@@ -111,7 +110,7 @@ export default function Fuel() {
           })),
         })
       } catch {
-        /* API unreachable — falls back to sample data */
+        /* API unreachable — the page shows empty states until data loads */
       }
     })()
     return () => {
@@ -120,8 +119,8 @@ export default function Fuel() {
   }, [session])
 
   const isLive = Boolean(session && live && live.owner === session.employee.code)
-  const tanks: TankRow[] = isLive && live ? live.tanks : [...tankRegister]
-  const receipts: ReceiptRow[] = isLive && live ? live.receipts : [...fuelReceipts]
+  const tanks: TankRow[] = isLive && live ? live.tanks : []
+  const receipts: ReceiptRow[] = isLive && live ? live.receipts : []
   const petrolTank = tanks.find((t) => t.product.toLowerCase().includes('petrol'))
   const dieselTank = tanks.find((t) => t.product.toLowerCase().includes('diesel'))
 
@@ -135,7 +134,7 @@ export default function Fuel() {
         <div className="actions">
           <button
             className="btn primary"
-            onClick={() => toast('Fuel receipt form would open in full build.')}
+            onClick={() => toast('Fuel receipt entry is not available yet.')}
           >
             ＋ Record fuel receipt
           </button>
@@ -145,13 +144,17 @@ export default function Fuel() {
       <div className="grid stats">
         <div className="card">
           <div className="stat-top">Petrol book stock</div>
-          <div className="value">{petrolTank?.book ?? '8,420 L'}</div>
-          <div className="delta">Tank capacity {petrolTank?.capacity ?? '15,000 L'}</div>
+          <div className="value">{petrolTank?.book ?? '—'}</div>
+          <div className="delta">
+            {petrolTank ? `Tank capacity ${petrolTank.capacity}` : 'No petrol tank configured'}
+          </div>
         </div>
         <div className="card">
           <div className="stat-top">Diesel book stock</div>
-          <div className="value">{dieselTank?.book ?? '11,280 L'}</div>
-          <div className="delta">Tank capacity {dieselTank?.capacity ?? '20,000 L'}</div>
+          <div className="value">{dieselTank?.book ?? '—'}</div>
+          <div className="delta">
+            {dieselTank ? `Tank capacity ${dieselTank.capacity}` : 'No diesel tank configured'}
+          </div>
         </div>
         <div className="card">
           <div className="stat-top">Last receipt</div>
@@ -162,10 +165,8 @@ export default function Fuel() {
         </div>
         <div className="card">
           <div className="stat-top">Stock variance</div>
-          <div className="value">{isLive ? '—' : '−18 L'}</div>
-          <div className="delta warn">
-            {isLive ? 'Dip readings not wired yet' : 'Pending dip reconciliation'}
-          </div>
+          <div className="value">—</div>
+          <div className="delta warn">Dip readings not recorded</div>
         </div>
       </div>
 
@@ -173,7 +174,7 @@ export default function Fuel() {
         <div className="cardhead">
           <h3>Tank register</h3>
           <span className="small">
-            {isLive ? 'Live · stock derived from movements' : 'Illustrative stock'}
+            {isLive ? 'Live · stock derived from movements' : 'No data yet'}
           </span>
         </div>
         <div className="tablewrap">
@@ -203,6 +204,13 @@ export default function Fuel() {
                   <td>{tank.level}</td>
                 </tr>
               ))}
+              {tanks.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="emptyhint">
+                    {isLive ? 'No tanks configured yet.' : 'Sign in to load the tank register.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -211,7 +219,7 @@ export default function Fuel() {
       <div className="card" style={{ marginTop: 16 }}>
         <div className="cardhead">
           <h3>Recent fuel receipts</h3>
-          <button className="btn" onClick={() => toast('Receipt entry is a prototype action.')}>
+          <button className="btn" onClick={() => toast('Receipt entry is not available yet.')}>
             ＋ New receipt
           </button>
         </div>
@@ -243,7 +251,7 @@ export default function Fuel() {
               {receipts.length === 0 && (
                 <tr>
                   <td colSpan={6} className="emptyhint">
-                    No fuel receipts recorded yet.
+                    {isLive ? 'No fuel receipts recorded yet.' : 'Sign in to load fuel receipts.'}
                   </td>
                 </tr>
               )}

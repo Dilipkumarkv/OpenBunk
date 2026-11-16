@@ -1,4 +1,4 @@
-# OpenBunk — Security Checklist (pre-real-data gate)
+# DeepBNK — Security Checklist (pre-real-data gate)
 
 Required before any real station data enters the system. Completed items are verified by tests
 or CI; unchecked items block production use.
@@ -59,7 +59,7 @@ or CI; unchecked items block production use.
 - [x] Containers: API runs as non-root, nginx image is unprivileged (uid 101, port 8080), the web
       port is bound to loopback, and images exclude `.env`, databases, and VCS data
 - [x] Fail-closed configuration: `ENVIRONMENT` is required; production rejects SQLite, wildcard or
-      non-HTTPS CORS origins, weak DB passwords, and demo seed PINs
+      non-HTTPS CORS origins, weak DB passwords, and weak seeded PINs
 
 ## Still pending (block real-data use)
 

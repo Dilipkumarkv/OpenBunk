@@ -16,22 +16,22 @@ def test_update_station_requires_owner_and_reauth(client, manager_token, owner_t
     response = client.put(
         "/api/v1/station",
         headers={**auth(manager_token), "X-Reauth-Pin": "123456"},
-        json={"name": "OpenBunk Test Station"},
+        json={"name": "DeepBNK Test Station"},
     )
     assert response.status_code == 403
 
     # owner without re-auth
-    response = client.put("/api/v1/station", headers=auth(owner_token), json={"name": "OpenBunk Test Station"})
+    response = client.put("/api/v1/station", headers=auth(owner_token), json={"name": "DeepBNK Test Station"})
     assert response.status_code == 401
 
     # owner with re-auth
     response = client.put(
         "/api/v1/station",
         headers={**auth(owner_token), "X-Reauth-Pin": "123456"},
-        json={"name": "OpenBunk Test Station", "business_day_start": "06:00"},
+        json={"name": "DeepBNK Test Station", "business_day_start": "06:00"},
     )
     assert response.status_code == 200
-    assert response.json()["name"] == "OpenBunk Test Station"
+    assert response.json()["name"] == "DeepBNK Test Station"
 
 
 def test_audit_requires_privileged_role(client, cashier_token, manager_token, auditor_token, owner_token):

@@ -1,4 +1,4 @@
-# OpenBunk — Release Readiness Report (Phase 09, 2026-11-16)
+# DeepBNK — Release Readiness Report (Phase 09, 2026-11-16)
 
 **Verdict: PROTOTYPE with pilot-grade internals — NOT cleared for pilot or production release.**
 The owner must explicitly approve any non-prototype use (spec gate), and a staging host must be
@@ -6,10 +6,10 @@ provisioned first. Everything below is verified or explicitly excluded — no in
 
 ## Release label: Prototype (v0.9)
 
-Labels: **Prototype** = visual interactions + sample data · **Pilot** = controlled real data with
-backups/support/UAT · **Production** = full operational gates. OpenBunk is not a pilot: it has no
-hosted environment, no trained users, no real data, no SLA/support, and the operator-facing
-hardware/dispenser path is absent by design.
+Labels: **Prototype** = visual interactions on empty states (no bundled sample data) · **Pilot** =
+controlled real data with backups/support/UAT · **Production** = full operational gates. DeepBNK is
+not a pilot: it has no hosted environment, no trained users, no real data, no SLA/support, and the
+operator-facing hardware/dispenser path is absent by design.
 
 ## Checklist, item by item (spec Phase 09)
 
@@ -29,11 +29,11 @@ hardware/dispenser path is absent by design.
 | 12  | Printer/PDF workflow                              | ⚠ print CSS shipped; not verified on a physical printer                                                                                                                        |
 | 13  | Operator training guide / quick reference         | ✓ `docs/operator-guide.md`                                                                                                                                                     |
 | 14  | Support/incident & recovery runbook               | ✓ `docs/deployment.md` (backup/restore, rollback, secret rotation, offboarding)                                                                                                |
-| 15  | Sample data separated from live data              | ✓ demo mode is labeled everywhere; production refuses to seed without explicit `OPENBUNK_SEED_PIN`                                                                             |
+| 15  | Sample data separated from live data              | ✓ no sample data ships in the UI (empty states + sign-in guidance until the API returns data); production refuses to seed without explicit `OPENBUNK_SEED_PIN`                 |
 | 16  | No unresolved critical/high defects               | ✓ CI green (frontend+backend+compose); **no defect tracker in use** — no formal triage process exists                                                                          |
 | 17  | User explicitly approves pilot/production         | ✗ **NOT GIVEN** — release gate, owner only                                                                                                                                     |
 
-## What OpenBunk can do today (honest)
+## What DeepBNK can do today (honest)
 
 - Record shifts with assisted meter math; closing is atomic, idempotent, reconciliation-enforced.
 - Track tanks via movement ledger; fuel receipts update book stock; variance flagged via dip entry.
@@ -47,7 +47,7 @@ hardware/dispenser path is absent by design.
 - Dispenser/hardware integration does not exist (irrelevant for current scope; meter is manual).
 - No sales-entry screen (sales arrive via API/seed only); no payment gateway by design.
 - No account recovery/PIN reset; no multi-instance rate limiting; no RLS at Postgres level.
-- Sample data throughout the demo path; alerts & sales-trend chart are illustrative.
+- No bundled demo data; with no reachable backend the UI shows empty states and sign-in guidance.
 - Not cleared for real data (`docs/security-checklist.md`).
 
 ## Outstanding risks
@@ -64,7 +64,7 @@ hardware/dispenser path is absent by design.
 Do not market or use for live operations. The only sensible next step after this report is:
 
 1. Owner decides: (a) remain prototype → stop here;
-2. (b) pilot → provision a staging host (small VPS), seed a **dummy** station (no real finance),
+2. (b) pilot → provision a staging host (small VPS), seed a **test** station (no real finance),
    run the Postgres restore drill **on staging**, execute operator UAT with 1–2 staff for 1–2 weeks;
 3. (c) production → all of (b) **plus** security checklist cleared, pen-test-level review,
    support/SLA, monitoring, and a signed release approval from the owner.

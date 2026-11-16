@@ -1,8 +1,8 @@
-# OpenBunk — Integrations
+# DeepBNK — Integrations
 
-Status: v0.6 (Phase 06, 2026-11-16). Integration policy: **only what the product and environment
-actually support**, in the spec's order. Mocks/demo data are always labeled; no integration may
-bypass authorization or audit events.
+Status: v0.7 (2026-11-16). Integration policy: **only what the product and environment
+actually support**, in the spec's order. The UI ships no sample or mock figures — anything the API
+has not returned shows an empty state; no integration may bypass authorization or audit events.
 
 ## 1. CSV import/export — SUPPORTED (owner/manager/accountant)
 
@@ -57,10 +57,10 @@ idempotency keys on all postings, reconciliation report per settlement cycle.
 
 ## MCP (Model Context Protocol) operating rules — as applied in this repo
 
-OpenBunk's MCP surface is the **development/operator** harness, not the product:
+DeepBNK's MCP surface is the **development/operator** harness, not the product:
 
 - **Discovered servers this session:** browser (read-only inspection + navigation for verification).
-  No OpenBunk business API is exposed as an MCP server; the app's secure API enforces auth itself.
+  No DeepBNK business API is exposed as an MCP server; the app's secure API enforces auth itself.
 - **Used read-only:** page navigation, DOM reads, console error checks — never mutating business data.
   All business writes in this phase happened through the app's own UI → API → DB with full authz/audit.
 - **Never exposed:** database credentials, seed PINs, or tokens in model context or prompts.
@@ -75,19 +75,18 @@ OpenBunk's MCP surface is the **development/operator** harness, not the product:
   all changes were reviewed against the spec before commit.
 - **If MCP is unavailable:** continue with local tools and record the limitation here (none hit this phase).
 
-## Frontend ↔ API integration map (as wired in v0.6)
+## Frontend ↔ API integration map (as wired in v0.7)
 
-| Page      | Live path                                                                                                                                         | Fallback                       |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| Dashboard | `/reports/daily-sales`, `/reports/collections`, `/sales?limit=4`                                                                                  | sample data + "Demo" label     |
-| Shifts    | `PUT /shifts/{id}/readings`, `POST …/validate` (server authoritative), `POST …/close` (Idempotency-Key + X-Reauth-Pin), stock deducted atomically | local-only, "Demo only" toasts |
-| Fuel      | `/tanks`, `/tanks/{id}/stock`, `/fuel-receipts`                                                                                                   | sample tanks/receipts          |
-| Credit    | `/credit/customers` (balances), `/credit/customers/import.csv` (dry-run → commit)                                                                 | sample accounts                |
-| Reports   | `/reports/daily-sales`, `/reports/collections`, `/export.csv?type=sales                                                                           | collections`                   | sample tables |
-| Settings  | `/api/v1/me`, `/health`, `DELETE /session`, `/api/v1/export` (owner, PIN)                                                                         | demo info                      |
-| Login     | `POST /session` (+ refresh/rotation via sessionStorage)                                                                                           | demo mode entry                |
+| Page      | Live path                                                                                                                                         | Without data                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Dashboard | `/reports/daily-sales`, `/reports/collections`, `/sales?limit=4`                                                                                  | `—` values + sign-in prompt       |
+| Shifts    | `PUT /shifts/{id}/readings`, `POST …/validate` (server authoritative), `POST …/close` (Idempotency-Key + X-Reauth-Pin), stock deducted atomically | signed-out state, actions off     |
+| Fuel      | `/tanks`, `/tanks/{id}/stock`, `/fuel-receipts`                                                                                                   | empty tank/receipt register       |
+| Credit    | `/credit/customers` (balances), `/credit/customers/import.csv` (dry-run → commit)                                                                 | empty customer list               |
+| Reports   | `/reports/daily-sales`, `/reports/collections`, `/export.csv?type=sales                                                                           | collections`                      | empty tables + sign-in prompt |
+| Settings  | `/api/v1/me`, `/health`, `DELETE /session`, `/api/v1/export` (owner, PIN)                                                                         | station defaults, "not signed in" |
+| Login     | `POST /session` (+ refresh/rotation via sessionStorage)                                                                                           | offline notice (no demo entry)    |
 
-**Known wiring gaps:** credit "add customer" button still a prototype toast; sales entry UI does not
-exist yet (recorded via backend/seed/API only); alerts & sales-trend chart are illustrative; dip
-readings not captured (stock variance shows —); CSV import UI shows dry-run summary but not full
-row-level error table.
+**Known wiring gaps:** credit "add customer" button is a prototype toast; sales entry UI does not
+exist yet (recorded via backend/seed/API only); dip readings not captured (stock variance shows —);
+CSV import UI shows dry-run summary but not full row-level error table.

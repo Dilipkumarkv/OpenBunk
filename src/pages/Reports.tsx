@@ -3,7 +3,25 @@ import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { getJson, request, ApiAuthError, ApiOfflineError } from '../lib/api'
 import { money } from '../lib/format'
-import { collectionBreakdown, dailySales, reportCatalogue } from '../data/sampleData'
+
+const reportCatalogue = [
+  {
+    name: 'Shift Sheet',
+    category: 'Operations',
+    description: 'Meter readings, volume, collections, variance',
+  },
+  {
+    name: 'Fuel Stock Ledger',
+    category: 'Inventory',
+    description: 'Receipts, sales, book stock and dip',
+  },
+  { name: 'Credit Ageing', category: 'Finance', description: 'Outstanding balances by age bucket' },
+  {
+    name: 'Collection Register',
+    category: 'Finance',
+    description: 'Cash, UPI, card and credit totals',
+  },
+] as const
 
 interface DailySales {
   date: string
@@ -48,7 +66,7 @@ export default function Reports() {
         if (!cancelled)
           setLive({ owner: session.employee.code, date: today, sales: daily, collections: coll })
       } catch {
-        /* API unreachable — falls back to sample data */
+        /* API unreachable — the page shows empty states until data loads */
       }
     })()
     return () => {
@@ -76,7 +94,7 @@ export default function Reports() {
             total: true,
           },
         ]
-      : dailySales
+      : []
 
   const totalCollections = isLive && collections ? Number(collections.total) || 0 : 0
   const collRows =
@@ -90,11 +108,11 @@ export default function Reports() {
               : '0.0%',
           tone: 'blue',
         }))
-      : [...collectionBreakdown]
+      : []
 
   const downloadCsv = async (type: 'sales' | 'collections') => {
     if (!session) {
-      toast('Demo only: sign in to download CSV exports.')
+      toast('Sign in to download CSV exports.')
       return
     }
     if (!canExport) {
@@ -123,11 +141,11 @@ export default function Reports() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `openbunk-${type}.csv`
+      a.download = `deepbnk-${type}.csv`
       a.click()
       URL.revokeObjectURL(url)
       setExportPin('')
-      toast(`Downloaded openbunk-${type}.csv from the server.`)
+      toast(`Downloaded deepbnk-${type}.csv from the server.`)
     } catch (error) {
       if (error instanceof ApiAuthError) toast('Session expired — sign in again to export.')
       else if (error instanceof ApiOfflineError)
@@ -188,37 +206,42 @@ export default function Reports() {
               {isLive ? 'Live · today' : 'Today'}
             </span>
           </div>
-          <div className="tablewrap">
-            <table>
-              <tbody>
-                {salesRows.map((row) =>
-                  'total' in row && row.total ? (
-                    <tr key={row.product}>
-                      <td>
-                        <b>{row.product}</b>
-                      </td>
-                      <td className="right">
-                        <b>{row.volume}</b>
-                      </td>
-                      <td className="right">
-                        <b>{row.value}</b>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={row.product}>
-                      <td>{row.product}</td>
-                      <td className="right">{row.volume}</td>
-                      <td className="right">{row.value}</td>
-                    </tr>
-                  ),
-                )}
-              </tbody>
-            </table>
-          </div>
-          {!isLive && (
-            <p className="small" style={{ marginTop: 10 }}>
-              Sample data (closed shifts appear here once signed in and closed).
+          {salesRows.length === 0 ? (
+            <p className="small emptyhint">
+              {isLive
+                ? 'No sales recorded today.'
+                : session
+                  ? 'No sales data loaded.'
+                  : 'Sign in to load today’s sales.'}
             </p>
+          ) : (
+            <div className="tablewrap">
+              <table>
+                <tbody>
+                  {salesRows.map((row) =>
+                    'total' in row && row.total ? (
+                      <tr key={row.product}>
+                        <td>
+                          <b>{row.product}</b>
+                        </td>
+                        <td className="right">
+                          <b>{row.volume}</b>
+                        </td>
+                        <td className="right">
+                          <b>{row.value}</b>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={row.product}>
+                        <td>{row.product}</td>
+                        <td className="right">{row.volume}</td>
+                        <td className="right">{row.value}</td>
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -227,35 +250,38 @@ export default function Reports() {
             <h3>Collection breakdown</h3>
             {isLive && <span className="pill green">Live</span>}
           </div>
-          <div className="tablewrap">
-            <table>
-              <tbody>
-                {collRows.map((row) => (
-                  <tr key={row.mode}>
-                    <td>{row.mode}</td>
-                    <td className="right">{row.amount}</td>
-                    <td className="right">
-                      <span className={`pill ${row.tone}`}>{row.share}</span>
-                    </td>
-                  </tr>
-                ))}
-                {collRows.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="emptyhint">
-                      No collections recorded today.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {collRows.length === 0 ? (
+            <p className="small emptyhint">
+              {isLive
+                ? 'No collections recorded today.'
+                : session
+                  ? 'No collection data loaded.'
+                  : 'Sign in to load today’s collections.'}
+            </p>
+          ) : (
+            <div className="tablewrap">
+              <table>
+                <tbody>
+                  {collRows.map((row) => (
+                    <tr key={row.mode}>
+                      <td>{row.mode}</td>
+                      <td className="right">{row.amount}</td>
+                      <td className="right">
+                        <span className={`pill ${row.tone}`}>{row.share}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="cardhead">
           <h3>Available report catalogue</h3>
-          <span className="small">Prototype preview</span>
+          <span className="small">Report catalogue</span>
         </div>
         <div className="tablewrap">
           <table>
@@ -274,7 +300,10 @@ export default function Reports() {
                   <td>{report.category}</td>
                   <td>{report.description}</td>
                   <td>
-                    <button className="btn" onClick={() => toast(`${report.name} preview`)}>
+                    <button
+                      className="btn"
+                      onClick={() => toast(`${report.name} is not available yet.`)}
+                    >
                       Open
                     </button>
                   </td>

@@ -1,9 +1,9 @@
-"""Idempotent demo seed: station OB-001, fuel products, tanks, nozzles, prices, demo employees.
+"""Idempotent development seed: station OB-001, fuel products, tanks, nozzles, prices, demo employees.
 
-Demo PIN: from OPENBUNK_SEED_PIN, defaulting to 123456 — only outside production.
+Seed PIN: from OPENBUNK_SEED_PIN, defaulting to 123456 — only outside production.
 In ENVIRONMENT=production, employee seeding is skipped unless OPENBUNK_SEED_PIN is set explicitly.
 
-Demo logins: EMP-00 Deep (owner) · EMP-01 Ravi (manager) · EMP-02 Kumar (cashier)
+Seed logins: EMP-00 Deep (owner) · EMP-01 Ravi (manager) · EMP-02 Kumar (cashier)
              EMP-03 Manjunath (accountant) · EMP-04 Audit (auditor)
 """
 
@@ -33,7 +33,7 @@ def seed() -> None:
     with SessionLocal() as db:
         station = db.query(Station).filter(Station.code == "OB-001").first()
         if station is None:
-            station = Station(code="OB-001", name="OpenBunk Demo Station", address="Melkote, Karnataka")
+            station = Station(code="OB-001", name="DeepBNK Station", address="Melkote, Karnataka")
             db.add(station)
             db.flush()
 

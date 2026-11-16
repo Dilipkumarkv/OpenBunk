@@ -119,7 +119,7 @@ def test_export_requires_owner_and_reauth(client, manager_token, owner_token):
 
     exported = client.get("/api/v1/export", headers={**auth(owner_token), "X-Reauth-Pin": "123456"})
     assert exported.status_code == 200
-    assert "openbunk-export.json" in exported.headers.get("content-disposition", "")
+    assert "deepbnk-export.json" in exported.headers.get("content-disposition", "")
     body = exported.json()
     assert "pin_hash" not in str(body)
     assert body["station"][0]["code"] == "OB-001"
