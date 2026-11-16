@@ -58,6 +58,51 @@ npm run build         # tsc -b && vite build -> dist/
 Dependencies are pinned to exact versions in `package.json`; `package-lock.json` is committed and
 `npm ci` is used everywhere (local and CI) so builds are reproducible.
 
+## Backend (Phase 04)
+
+FastAPI + SQLAlchemy 2 + Alembic + Pydantic. The prototype UI is intentionally **not** wired to
+the API yet (that lands in Phase 06); the backend stands alone under `backend/`.
+
+```bash
+cd backend
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt   # Windows; use bin/ on macOS/Linux
+# default DATABASE_URL is SQLite (./openbunk.db) — no server needed for local dev
+python -m alembic upgrade head                   # create/migrate schema (reversible)
+python -m app.seed                               # demo station OB-001 (demo PINs: 1234)
+python -m uvicorn app.main:app --reload          # http://127.0.0.1:8000  (docs at /api/docs)
+```
+
+Against PostgreSQL (production):
+
+```bash
+$env:DATABASE_URL = "postgresql+psycopg://openbunk:openbunk@localhost:5432/openbunk"
+python -m alembic upgrade head   # from-empty-DB migration is CI-tested against postgres:16
+python -m uvicorn app.main:app
+```
+
+Tests:
+
+```bash
+cd backend
+python -m pytest        # uses a throwaway SQLite DB locally; CI runs the same suite
+                        # against a postgres:16 service container
+```
+
+API conventions (see `/api/docs` for the full OpenAPI schema):
+
+- All endpoints under `/api/v1` (health/readiness at `/health`, `/readiness`, no secrets).
+- Bearer session tokens; PINs are pbkdf2-hashed, tokens stored as sha256 hashes.
+  **Demo PINs are 1234 — never use in production; Phase 05 hardens auth.**
+- Structured error bodies: `{ "error": { "code", "message", "details", "requestId" } }`.
+- `X-Request-Id` on every response (echoed or generated); structured stdout logs.
+- List endpoints paginate (`limit`/`offset`, max 100) with totals.
+- `Idempotency-Key` required for `POST /api/v1/shifts/{id}/close`; optional for sales (replays
+  return the stored response with `X-Idempotent-Replay: true`).
+- Money is NUMERIC(12,2) with half-up rounding; volumes NUMERIC(14,1).
+- Posted records are immutable; fuel stock moves only through append-only `stock_movements`;
+  audit events are append-only (`/api/v1/audit`, owner/manager only).
+
 ## Project structure
 
 ```

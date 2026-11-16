@@ -41,3 +41,12 @@ __pycache__
 .venv
 *.tsbuildinfo
 
+
+# Python backend
+backend/.venv/
+__pycache__/
+*.pyc
+backend/*.db
+backend/openbunk.db
+.pytest_cache/
+
