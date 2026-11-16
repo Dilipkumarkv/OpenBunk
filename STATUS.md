@@ -50,19 +50,24 @@ Backend/database intentionally not started (Phase 04+).
 **Dependencies:** all pinned to exact versions; `package-lock.json` committed; `.npmrc` sets
 `save-exact=true`.
 
-**CI:** `.github/workflows/ci.yml` added (checkout → setup-node 24 → `npm ci` → lint →
-type-check → test → format:check → build). NOTE: not yet executed — no GitHub remote configured
-and nothing pushed. Treat CI as configured-but-unverified until first push.
+**CI (verified 2026-11-16):** `.github/workflows/ci.yml` (checkout → setup-node 24 → `npm ci` →
+lint → type-check → test → format:check → build) on `github.com/Dilipkumarkv/OpenBunk`.
+First run (`767627d`) FAILED at format:check — this STATUS.md was committed after the local
+format pass. Fixed in `a3d3fee` (`prettier --write STATUS.md`); second run (`a3d3fee`, run 43805135692) PASSED all steps. Note: annotations warn that actions/checkout@v4 and
+actions/setup-node@v4 target Node 20 (forced onto Node 24 on runners); consider bumping to
+node24-based action versions when available.
 
 **Files added:** README.md (rewritten: setup, scripts, structure, troubleshooting), LICENSE (MIT),
-.gitignore (+ .env, _.db/_.sqlite, coverage, caches), .env.example, .prettierrc.json, .prettierignore,
+.gitignore (+ .env, db/sqlite/coverage/cache patterns), .env.example, .prettierrc.json, .prettierignore,
 .npmrc, .github/workflows/ci.yml, src/test/setup.ts, src/App.test.tsx, favicon.svg.
 Default Vite starter content replaced with a minimal placeholder app (hero/icons assets removed).
 
 **Defects / notes:**
 
 - `format:check` initially failed on 3 files; fixed with `prettier --write`, now passes.
-- GitHub Actions workflow has not run yet (no remote).
+- First CI run failed on `format:check` (STATUS.md not formatted before commit); fixed in
+  `a3d3fee`, second CI run green.
+- Repo made public on GitHub at user's request; pushed to `main`.
 - No license headers on source files (MIT covers via LICENSE).
 
 ## Known limitations
