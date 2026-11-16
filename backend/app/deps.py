@@ -1,4 +1,4 @@
-"""Shared dependencies: DB session, pagination, auth, rate limiting."""
+"""Shared dependencies: DB session, pagination, auth, roles, re-auth, rate limiting."""
 
 import time
 from collections import defaultdict, deque
@@ -10,9 +10,19 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .errors import ApiError
-from .logging_config import request_id_ctx
 from .models import Employee, SessionToken, utcnow
-from .security import hash_token
+from .security import hash_token, verify_pin
+
+ROLES = ("owner", "manager", "cashier", "accountant", "auditor")
+# Permission matrix — see docs/permissions.md. Server-side enforced on every endpoint.
+REPORTS_AUDIT = ("owner", "manager", "accountant", "auditor")
+OPERATIONAL_WRITE = ("owner", "manager")
+CASHIER_WRITE = ("owner", "manager", "cashier")
+CREDIT_WRITE = ("owner", "manager", "accountant")
+ADMIN_ONLY = ("owner",)
+
+ACCESS_TTL = timedelta(minutes=15)
+REFRESH_TTL = timedelta(hours=12)
 
 
 def get_db_dep() -> Generator[Session, None, None]:
@@ -33,21 +43,43 @@ def _aware(dt):
 
 
 def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
+    """Access tokens only; refresh tokens cannot call APIs."""
     auth = request.headers.get("authorization", "")
     prefix = "Bearer "
     if not auth.startswith(prefix):
         raise ApiError(401, "Missing bearer token")
     token_hash = hash_token(auth[len(prefix):])
-    session = db.query(SessionToken).filter(SessionToken.token_hash == token_hash).first()
+    session = (
+        db.query(SessionToken)
+        .filter(SessionToken.token_hash == token_hash, SessionToken.kind == "access")
+        .first()
+    )
     if session is None or _aware(session.revoked_at) is not None or _aware(session.expires_at) < utcnow():
-        raise ApiError(401, "Session expired or revoked")
+        raise ApiError(401, "Access token expired or revoked")
     employee = db.get(Employee, session.employee_id)
     if employee is None or not employee.active:
         raise ApiError(401, "Employee not found or inactive")
     return employee
 
 
-# --- Simple in-memory rate limit (single instance). Redis-backed limiter lands in Phase 05. ---
+def require_roles(*roles: str):
+    def dependency(employee: Employee = Depends(get_current_employee)) -> Employee:
+        if employee.role not in roles:
+            raise ApiError(403, "Insufficient role for this action")
+        return employee
+
+    return dependency
+
+
+def require_reauth(request: Request, employee: Employee = Depends(get_current_employee)) -> Employee:
+    """Re-authentication for sensitive actions via X-Reauth-Pin (the caller's PIN)."""
+    pin = request.headers.get("x-reauth-pin")
+    if not pin or not verify_pin(pin, employee.pin_hash):
+        raise ApiError(401, "Re-authentication required (X-Reauth-Pin)")
+    return employee
+
+
+# --- Simple in-memory rate limit (single instance). ---
 _hits: dict[str, deque[float]] = defaultdict(deque)
 
 
@@ -61,7 +93,7 @@ def enforce_rate_limit(key: str, limit_per_minute: int) -> None:
     window.append(now)
 
 
-def audit(db: Session, *, station_id, action: str, entity_type: str, entity_id=None, reason=None, payload=None, actor=None):
+def audit(db, *, station_id, action: str, entity_type: str, entity_id=None, reason=None, payload=None, actor=None):
     from .models import AuditEvent
 
     db.add(
@@ -77,19 +109,18 @@ def audit(db: Session, *, station_id, action: str, entity_type: str, entity_id=N
     )
 
 
-SESSION_TTL_HOURS = 12
-
-
-def session_ttl() -> timedelta:
-    return timedelta(hours=SESSION_TTL_HOURS)
-
-
 __all__ = [
+    "ADMIN_ONLY",
+    "CASHIER_WRITE",
+    "CREDIT_WRITE",
+    "OPERATIONAL_WRITE",
+    "REPORTS_AUDIT",
+    "ROLES",
     "audit",
     "enforce_rate_limit",
     "get_current_employee",
     "get_db_dep",
     "paginate",
-    "request_id_ctx",
-    "session_ttl",
+    "require_reauth",
+    "require_roles",
 ]

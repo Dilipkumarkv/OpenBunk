@@ -50,24 +50,38 @@ def client():
         yield c
 
 
+def _login(client, code):
+    response = client.post(
+        "/api/v1/session",
+        json={"station_code": "OB-001", "employee_code": code, "pin": "1234"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["access_token"]
+
+
 @pytest.fixture()
 def manager_token(client):
-    response = client.post(
-        "/api/v1/session",
-        json={"station_code": "OB-001", "employee_code": "EMP-01", "pin": "1234"},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["token"]
+    return _login(client, "EMP-01")
 
 
 @pytest.fixture()
-def attendant_token(client):
-    response = client.post(
-        "/api/v1/session",
-        json={"station_code": "OB-001", "employee_code": "EMP-02", "pin": "1234"},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["token"]
+def cashier_token(client):
+    return _login(client, "EMP-02")
+
+
+@pytest.fixture()
+def owner_token(client):
+    return _login(client, "EMP-00")
+
+
+@pytest.fixture()
+def accountant_token(client):
+    return _login(client, "EMP-03")
+
+
+@pytest.fixture()
+def auditor_token(client):
+    return _login(client, "EMP-04")
 
 
 def auth(token):

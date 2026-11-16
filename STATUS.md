@@ -2,8 +2,8 @@
 
 ## Current milestone
 
-UI prototype in-app (Phase 02), domain rules (Phase 03) and backend/database (Phase 04) — complete.
-Next: auth/security/roles (Phase 05).
+UI prototype in-app (Phase 02), domain rules (Phase 03), backend/database (Phase 04) and
+auth/security (Phase 05) — complete. Next: integration (Phase 06).
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Next: auth/security/roles (Phase 05).
 - [x] UI moved into project repository (2026-11-16) — see Phase 02 below.
 - [x] Domain rules and tests (2026-11-16) — see Phase 03 below.
 - [x] API/database (2026-11-16) — see Phase 04 below.
-- [ ] Auth/security
+- [x] Auth/security (2026-11-16) — see Phase 05 below.
 - [ ] Integrations
 - [ ] CI and quality gates
 - [ ] Staging deployment
@@ -214,11 +214,51 @@ migrations reversible (upgrade→downgrade→upgrade verified on SQLite).
   drill pending (Phase 08/09).
 - Frontend↔API integration pending (Phase 06). Demo PINs are 1234 — documented as demo-only.
 
+## Phase 05 — Authentication, Authorization & Security (2026-11-16)
+
+**Roles:** owner, manager, cashier, accountant, auditor — permission matrix documented in
+`docs/permissions.md`, enforced server-side on every endpoint (UI hiding is not authorization).
+Seed: EMP-00 owner · EMP-01 manager · EMP-02 cashier · EMP-03 accountant · EMP-04 auditor.
+
+**Implemented**
+
+- argon2id PIN hashing (argon2-cffi); PINs never stored/logged reversibly
+- Sessions: 15-min opaque access tokens + 12h single-use rotating refresh tokens; only sha256
+  hashes persisted; access token cannot call refresh endpoints; **refresh-token reuse burns the
+  entire credential family** (audited as `refresh.reuse_detected`)
+- Login lockout: 5 consecutive failures → 15-min lock (429), audited; cleared on success;
+  per-IP rate limit retained on `/session` + `/session/refresh`
+- Re-authentication (`X-Reauth-Pin`) for sensitive actions: shift close, station PUT, role change,
+  offboard, export, tank adjustment
+- Security headers middleware (nosniff, DENY frame, no-referrer, CSP default-src 'none'; HSTS in production)
+- New: staff management (owner-only: list/create/role-change/soft-offboard with immediate session
+  revocation), owner-only `/api/v1/export` (no pin_hash, `data.exported` audited), `POST /tanks/{id}/adjustments`
+  (explicit signed adjustment + reason, audited), role-protected audit (owner + auditor only)
+- Production seed guard: employee seeding skipped unless `OPENBUNK_SEED_PIN` set (verified both paths)
+- `docs/security-checklist.md` — NOT cleared for real data (recovery flow, backup-restore drill,
+  Redis rate limiter pending)
+
+**Verification (all real, run today):**
+
+- `python -m pytest` → **38 passed** (was 27; +test_security.py 7 tests: lockout, cross-station
+  isolation, refresh rotation/reuse family burn, cashier-cannot-close, export re-auth, role-change
+  audit, offboard session kill) — run on SQLite; CI runs same suite on postgres:16
+- Migration round-trip: `upgrade head` (initial + phase05 revision) → `downgrade base` → `upgrade head` ✓
+- Production seed guard verified: no employees seeded without PIN; 5 seeded with explicit `OPENBUNK_SEED_PIN=9999`
+
+**Known gaps**
+
+- No account recovery / PIN reset flow; no refresh-token cookie mode (bearer header only; CSRF N/A)
+- Rate limiter is single-instance in-memory; needs Redis for multi-instance
+- Cross-station isolation relies on pervasive station_id filtering (no RLS at DB level) — PG RLS could harden further
+- Offboarding is soft-delete only (by design; posted records immutable)
+
 ## Known limitations
 
-- Prototype uses illustrative sample data.
-- No persistence, authentication, backend, cloud, or hardware integration.
+- Demo/sample data throughout; persistent backend exists but the UI is not wired to it yet.
 - Buttons that say demo/preview do not perform real business writes.
+- Security posture implemented but **not cleared for real data** — see docs/security-checklist.md
+  (recovery flow, backup-restore drill, multi-instance rate limiting pending).
 
 ## Update this file after every phase
 

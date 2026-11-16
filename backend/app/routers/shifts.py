@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, Header, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_current_employee, get_db_dep, paginate
+from ..deps import audit, get_current_employee, get_db_dep, paginate, require_reauth, require_roles
 from ..domain import compute_volume, round2
 from ..errors import ApiError
 from ..idempotency import replay_if_present, store
@@ -29,7 +29,7 @@ _SORTABLE = {"business_date": Shift.business_date, "kind": Shift.kind, "status":
 
 
 @router.post("/shifts", response_model=ShiftOut, status_code=status.HTTP_201_CREATED)
-def open_shift(payload: ShiftOpen, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def open_shift(payload: ShiftOpen, employee: Employee = Depends(require_roles("owner", "manager", "cashier")), db: Session = Depends(get_db_dep)):
     business_date = payload.business_date or date.today()
     operator = employee
     if payload.employee_id is not None and payload.employee_id != employee.id:
@@ -99,7 +99,7 @@ def get_shift(shift_id: UUID, employee: Employee = Depends(get_current_employee)
 
 
 @router.put("/shifts/{shift_id}/readings", response_model=ShiftDetailOut)
-def upsert_readings(shift_id: UUID, payload: ReadingsUpsert, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def upsert_readings(shift_id: UUID, payload: ReadingsUpsert, employee: Employee = Depends(require_roles("owner", "manager", "cashier")), db: Session = Depends(get_db_dep)):
     shift = _get_shift(db, shift_id, employee.station_id)
     if shift.status != "draft":
         raise ApiError(409, "Shift is closed; readings are immutable")
@@ -202,7 +202,8 @@ def close_shift(
     shift_id: UUID,
     payload: ShiftClose,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager")),
+    _: Employee = Depends(require_reauth),
     db: Session = Depends(get_db_dep),
 ):
     if not idempotency_key:

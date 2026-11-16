@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_current_employee, get_db_dep, paginate
+from ..deps import audit, get_current_employee, get_db_dep, paginate, require_reauth, require_roles
 from ..errors import ApiError
 from ..models import Employee, FuelProduct, Nozzle, StockMovement, Tank
 from ..schemas import (
@@ -14,6 +14,7 @@ from ..schemas import (
     FuelProductOut,
     NozzleCreate,
     NozzleOut,
+    TankAdjustmentCreate,
     TankCreate,
     TankOut,
     TankStockOut,
@@ -30,7 +31,7 @@ def list_products(
 
 
 @router.post("/fuel-products", response_model=FuelProductOut, status_code=status.HTTP_201_CREATED)
-def create_product(payload: FuelProductCreate, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def create_product(payload: FuelProductCreate, employee: Employee = Depends(require_roles("owner", "manager")), db: Session = Depends(get_db_dep)):
     existing = db.query(FuelProduct).filter(FuelProduct.station_id == employee.station_id, FuelProduct.code == payload.code).first()
     if existing is not None:
         raise ApiError(409, "Product code already exists")
@@ -48,7 +49,7 @@ def list_tanks(employee: Employee = Depends(get_current_employee), db: Session =
 
 
 @router.post("/tanks", response_model=TankOut, status_code=status.HTTP_201_CREATED)
-def create_tank(payload: TankCreate, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def create_tank(payload: TankCreate, employee: Employee = Depends(require_roles("owner", "manager")), db: Session = Depends(get_db_dep)):
     product = db.get(FuelProduct, payload.product_id)
     if product is None or product.station_id != employee.station_id:
         raise ApiError(404, "Fuel product not found")
@@ -81,7 +82,7 @@ def list_nozzles(employee: Employee = Depends(get_current_employee), db: Session
 
 
 @router.post("/nozzles", response_model=NozzleOut, status_code=status.HTTP_201_CREATED)
-def create_nozzle(payload: NozzleCreate, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def create_nozzle(payload: NozzleCreate, employee: Employee = Depends(require_roles("owner", "manager")), db: Session = Depends(get_db_dep)):
     tank = db.get(Tank, payload.tank_id)
     if tank is None or tank.station_id != employee.station_id:
         raise ApiError(404, "Tank not found")
@@ -97,6 +98,42 @@ def create_nozzle(payload: NozzleCreate, employee: Employee = Depends(get_curren
     db.commit()
     db.refresh(nozzle)
     return nozzle
+
+
+@router.post("/tanks/{tank_id}/adjustments", status_code=status.HTTP_201_CREATED)
+def adjust_tank(
+    tank_id: UUID,
+    payload: TankAdjustmentCreate,
+    employee: Employee = Depends(require_roles("owner", "manager")),
+    _: Employee = Depends(require_reauth),
+    db: Session = Depends(get_db_dep),
+):
+    """Explicit signed adjustment — corrections are recorded, never silent mutations."""
+    tank = db.get(Tank, tank_id)
+    if tank is None or tank.station_id != employee.station_id:
+        raise ApiError(404, "Tank not found")
+    movement = StockMovement(
+        station_id=employee.station_id,
+        tank_id=tank.id,
+        kind="adjustment",
+        delta_litres=payload.delta_litres,
+        source_type="manual_adjustment",
+        source_id=str(employee.id),
+    )
+    db.add(movement)
+    audit(
+        db,
+        station_id=employee.station_id,
+        action="stock.adjustment",
+        entity_type="tank",
+        entity_id=tank.id,
+        reason=payload.reason,
+        payload={"delta_litres": str(payload.delta_litres), "tank": tank.label},
+        actor=employee.id,
+    )
+    db.commit()
+    db.refresh(movement)
+    return {"movement_id": str(movement.id), "delta_litres": str(payload.delta_litres), "reason": payload.reason}
 
 
 @router.get("/tanks/{tank_id}/stock", response_model=TankStockOut)

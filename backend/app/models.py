@@ -272,14 +272,30 @@ class AuditEvent(Base):
 
 class SessionToken(Base):
     __tablename__ = "session_tokens"
+    __table_args__ = (CheckConstraint("kind IN ('access','refresh')", name="ck_session_token_kind"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     station_id: Mapped[UUID] = mapped_column(ForeignKey("stations.id"), nullable=False, index=True)
     employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), default="access", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LoginAttempt(Base):
+    """Consecutive-failure tracking + lockout, keyed by (station, employee_code)."""
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (UniqueConstraint("station_id", "employee_code", name="uq_login_attempt_key"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    station_id: Mapped[UUID] = mapped_column(ForeignKey("stations.id"), nullable=False)
+    employee_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class IdempotencyKey(Base):

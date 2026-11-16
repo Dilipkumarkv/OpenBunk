@@ -1,14 +1,32 @@
 """Idempotent demo seed: station OB-001, fuel products, tanks, nozzles, demo employees.
 
-Demo credentials (never use in production): Ravi=EMP-01, Kumar=EMP-02,
-Manjunath=EMP-03 — PIN 1234 for all three.
+Demo PINs: from OPENBUNK_SEED_PIN, defaulting to 1234 — only outside production.
+In ENVIRONMENT=production, seeding is skipped unless OPENBUNK_SEED_PIN is set explicitly.
+
+Demo logins: EMP-00 Deep (owner) · EMP-01 Ravi (manager) · EMP-02 Kumar (cashier)
+             EMP-03 Manjunath (accountant) · EMP-04 Audit (auditor)
 """
 
+import os
 from decimal import Decimal
 
+from .config import get_settings
 from .db import SessionLocal
 from .models import Employee, FuelProduct, Nozzle, Station, Tank
 from .security import hash_pin
+
+DEMO_PIN_FALLBACK = "1234"
+
+
+def _seed_pin() -> str | None:
+    settings = get_settings()
+    pin = os.environ.get("OPENBUNK_SEED_PIN")
+    if settings.is_production:
+        if not pin:
+            print("ENVIRONMENT=production and OPENBUNK_SEED_PIN unset — skipping employee seeding.")
+            return None
+        return pin
+    return pin or DEMO_PIN_FALLBACK
 
 
 def seed() -> None:
@@ -73,18 +91,24 @@ def seed() -> None:
                     )
                 )
 
-        employees = [
-            ("EMP-01", "Ravi", "manager"),
-            ("EMP-02", "Kumar", "attendant"),
-            ("EMP-03", "Manjunath", "attendant"),
-        ]
-        for code, name, role in employees:
-            exists = db.query(Employee).filter(Employee.station_id == station.id, Employee.code == code).first()
-            if exists is None:
-                db.add(Employee(station_id=station.id, code=code, name=name, role=role, pin_hash=hash_pin("1234")))
+        pin = _seed_pin()
+        if pin is not None:
+            employees = [
+                ("EMP-00", "Deep", "owner"),
+                ("EMP-01", "Ravi", "manager"),
+                ("EMP-02", "Kumar", "cashier"),
+                ("EMP-03", "Manjunath", "accountant"),
+                ("EMP-04", "Audit", "auditor"),
+            ]
+            for code, name, role in employees:
+                exists = db.query(Employee).filter(
+                    Employee.station_id == station.id, Employee.code == code
+                ).first()
+                if exists is None:
+                    db.add(Employee(station_id=station.id, code=code, name=name, role=role, pin_hash=hash_pin(pin)))
 
         db.commit()
-    print("Seed complete: station OB-001, products/tanks/nozzles/employees (demo PIN 1234).")
+    print("Seed complete: station OB-001 (demo employees EMP-00..EMP-04; PIN from OPENBUNK_SEED_PIN or 1234).")
 
 
 if __name__ == "__main__":

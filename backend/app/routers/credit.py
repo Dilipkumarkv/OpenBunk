@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_current_employee, get_db_dep
+from ..deps import audit, get_db_dep, paginate, require_roles
 from ..domain import round2
 from ..errors import ApiError
 from ..models import CreditCustomer, CreditLedgerEntry, Employee
@@ -36,7 +36,7 @@ def _balance(db: Session, customer_id: UUID) -> Decimal:
 @router.post("/credit/customers", response_model=CreditCustomerOut, status_code=status.HTTP_201_CREATED)
 def create_customer(
     payload: CreditCustomerCreate,
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant")),
     db: Session = Depends(get_db_dep),
 ):
     existing = db.query(CreditCustomer).filter(
@@ -57,10 +57,9 @@ def list_customers(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant")),
     db: Session = Depends(get_db_dep),
 ):
-    from ..deps import paginate
 
     limit, offset = paginate(limit, offset)
     query = db.query(CreditCustomer).filter(CreditCustomer.station_id == employee.station_id)
@@ -72,7 +71,7 @@ def list_customers(
 
 
 @router.get("/credit/customers/{customer_id}/ledger", response_model=CreditLedgerOut)
-def get_ledger(customer_id: UUID, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def get_ledger(customer_id: UUID, employee: Employee = Depends(require_roles("owner", "manager", "accountant")), db: Session = Depends(get_db_dep)):
     customer = db.get(CreditCustomer, customer_id)
     if customer is None or customer.station_id != employee.station_id:
         raise ApiError(404, "Credit customer not found")
@@ -94,7 +93,7 @@ def get_ledger(customer_id: UUID, employee: Employee = Depends(get_current_emplo
 def post_entry(
     customer_id: UUID,
     payload: CreditEntryCreate,
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant")),
     db: Session = Depends(get_db_dep),
 ):
     customer = db.get(CreditCustomer, customer_id)

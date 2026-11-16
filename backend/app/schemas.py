@@ -17,16 +17,47 @@ class SessionRequest(BaseModel):
     pin: str = Field(min_length=4, max_length=64)
 
 
-class SessionResponse(BaseModel):
-    token: str
-    expires_at: datetime
+class SessionTokensOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    access_expires_at: datetime
+    refresh_expires_at: datetime
     employee: "EmployeeOut"
     station: "StationOut"
 
 
-class MeResponse(BaseModel):
-    employee: "EmployeeOut"
-    station: "StationOut"
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class LoginAttemptOut(BaseModel):
+    employee_code: str
+    failures: int
+    locked_until: datetime | None
+
+
+# ---------- Tank adjustment ----------
+class TankAdjustmentCreate(BaseModel):
+    delta_litres: Decimal  # signed: + in, − out
+    reason: str = Field(min_length=1, max_length=300)
+
+    @model_validator(mode="after")
+    def non_zero(self):
+        if self.delta_litres == 0:
+            raise ValueError("delta_litres must be non-zero (signed)")
+        return self
+
+
+# ---------- Staff / roles ----------
+class EmployeeCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=200)
+    role: Literal["owner", "manager", "cashier", "accountant", "auditor"]
+    pin: str = Field(min_length=4, max_length=64)
+
+
+class EmployeeRoleUpdate(BaseModel):
+    role: Literal["owner", "manager", "cashier", "accountant", "auditor"]
 
 
 # ---------- Station ----------
@@ -288,5 +319,10 @@ class AuditEventOut(ORMModel):
     created_at: datetime
 
 
-SessionResponse.model_rebuild()
+class MeResponse(BaseModel):
+    employee: "EmployeeOut"
+    station: "StationOut"
+
+
+SessionTokensOut.model_rebuild()
 MeResponse.model_rebuild()

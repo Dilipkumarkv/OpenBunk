@@ -8,7 +8,7 @@ from ..schemas import AuditEventOut
 
 router = APIRouter(tags=["audit"])
 
-_PRIVILEGED_ROLES = {"owner", "manager"}
+_PRIVILEGED_ROLES = {"owner", "auditor"}
 
 
 @router.get("/audit", response_model=list[AuditEventOut])
@@ -19,7 +19,7 @@ def list_audit(
     db: Session = Depends(get_db_dep),
 ):
     if employee.role not in _PRIVILEGED_ROLES:
-        raise ApiError(403, "Audit log requires owner or manager role")
+        raise ApiError(403, "Audit log requires owner or auditor role")
     limit, offset = paginate(limit, offset)
     return (
         db.query(AuditEvent)

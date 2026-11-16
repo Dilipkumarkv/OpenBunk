@@ -58,7 +58,7 @@ def test_shift_open_validate_close_happy_path(client, manager_token):
 
     closed = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "test-close-1"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "test-close-1"},
         json={},
     )
     assert closed.status_code == 200
@@ -72,7 +72,11 @@ def test_close_requires_idempotency_key(client, manager_token):
     nozzles = _nozzles_by_label(client, manager_token)
     shift = _open_shift(client, manager_token)
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
-    response = client.post(f"/api/v1/shifts/{shift['id']}/close", headers=auth(manager_token), json={})
+    response = client.post(
+        f"/api/v1/shifts/{shift['id']}/close",
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234"},
+        json={},
+    )
     assert response.status_code == 400
 
 
@@ -83,14 +87,14 @@ def test_close_is_idempotent(client, manager_token):
 
     first = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "idem-key-42"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-42"},
         json={},
     )
     assert first.status_code == 200
 
     replay = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "idem-key-42"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-42"},
         json={},
     )
     assert replay.status_code == 200
@@ -100,7 +104,7 @@ def test_close_is_idempotent(client, manager_token):
     # a fresh key after close conflicts instead of double-counting
     second = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "idem-key-43"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-43"},
         json={},
     )
     assert second.status_code == 409
@@ -113,7 +117,7 @@ def test_close_deducts_tank_stock(client, manager_token):
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
     response = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "stock-close-1"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "stock-close-1"},
         json={},
     )
     assert response.status_code == 200
@@ -155,7 +159,7 @@ def test_closing_below_opening_blocks_close(client, manager_token):
 
     closed = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "bad-readings-close"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "bad-readings-close"},
         json={},
     )
     assert closed.status_code == 422
@@ -186,7 +190,7 @@ def test_rollover_authorized_allows_wrap(client, manager_token):
     )
     close = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "rollover-close-1"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "rollover-close-1"},
         json={
             "rollover": {
                 "petrol": True,
@@ -204,7 +208,7 @@ def test_close_with_no_readings_is_422(client, manager_token):
     shift = _open_shift(client, manager_token)
     response = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "empty-close-1"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "empty-close-1"},
         json={},
     )
     assert response.status_code == 422
@@ -216,7 +220,7 @@ def test_readings_cannot_change_after_close(client, manager_token):
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
     client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "Idempotency-Key": "immutability-close"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "immutability-close"},
         json={},
     )
     response = client.put(

@@ -89,11 +89,18 @@ python -m pytest        # uses a throwaway SQLite DB locally; CI runs the same s
                         # against a postgres:16 service container
 ```
 
+Auth model: POST `/api/v1/session` → `access_token` (15 min) + `refresh_token` (12 h, rotating).
+Refresh via POST `/api/v1/session/refresh`; logout via DELETE `/api/v1/session`. Sensitive actions
+need `X-Reauth-Pin: <your PIN>` — see `docs/permissions.md` and `docs/security-checklist.md`.
+
 API conventions (see `/api/docs` for the full OpenAPI schema):
 
 - All endpoints under `/api/v1` (health/readiness at `/health`, `/readiness`, no secrets).
-- Bearer session tokens; PINs are pbkdf2-hashed, tokens stored as sha256 hashes.
-  **Demo PINs are 1234 — never use in production; Phase 05 hardens auth.**
+- Bearer-token auth (Phase 05): 15-min access tokens + rotating single-use refresh tokens
+  (12 h); argon2id PIN hashes; tokens stored as sha256; lockout after 5 failures (15 min);
+  reuse of a refresh token burns the whole credential family. Permissions enforced server-side
+  for 5 roles — see `docs/permissions.md`; sensitive actions require `X-Reauth-Pin`.
+  **Demo PINs are 1234 — set `OPENBUNK_SEED_PIN`/disable seeding before production.**
 - Structured error bodies: `{ "error": { "code", "message", "details", "requestId" } }`.
 - `X-Request-Id` on every response (echoed or generated); structured stdout logs.
 - List endpoints paginate (`limit`/`offset`, max 100) with totals.

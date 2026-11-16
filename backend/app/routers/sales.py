@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_current_employee, get_db_dep, paginate
+from ..deps import audit, get_db_dep, paginate, require_roles
 from ..domain import round2
 from ..errors import ApiError
 from ..idempotency import replay_if_present, store
@@ -44,7 +44,7 @@ class SaleOut(ORMModel):
 def create_sale(
     payload: SaleCreate,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "cashier")),
     db: Session = Depends(get_db_dep),
 ):
     replayed, stored = replay_if_present(db, employee.station_id, "sales.create", idempotency_key)
@@ -127,7 +127,7 @@ def list_sales(
     tender: str | None = None,
     limit: int = Query(default=50),
     offset: int = Query(default=0),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant", "auditor")),
     db: Session = Depends(get_db_dep),
 ):
     limit, offset = paginate(limit, offset)

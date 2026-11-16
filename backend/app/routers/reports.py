@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_employee, get_db_dep
+from ..deps import get_db_dep, require_roles
 from ..domain import round2
 from ..models import Employee, FuelProduct, MeterReading, Nozzle, Payment, Sale, Shift
 from ..schemas import CollectionSlice, CollectionsOut, DailySalesOut, ProductTotal
@@ -16,7 +16,7 @@ router = APIRouter(tags=["reports"])
 @router.get("/reports/daily-sales", response_model=DailySalesOut)
 def daily_sales(
     date_param: date = Query(alias="date"),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant", "auditor")),
     db: Session = Depends(get_db_dep),
 ):
     """Metre-based daily sales: sums volumes/values of closed shifts' readings for the date."""
@@ -45,7 +45,7 @@ def daily_sales(
 @router.get("/reports/collections", response_model=CollectionsOut)
 def collections(
     date_param: date = Query(alias="date"),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant", "auditor")),
     db: Session = Depends(get_db_dep),
 ):
     start = datetime.combine(date_param, datetime.min.time())

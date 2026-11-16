@@ -19,7 +19,7 @@ def _close_prototype_shift(client, token):
     )
     response = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(token), "Idempotency-Key": "reports-close-1"},
+        headers={**auth(token), "Idempotency-Key": "reports-close-1", "X-Reauth-Pin": "1234"},
         json={},
     )
     assert response.status_code == 200

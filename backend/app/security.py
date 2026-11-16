@@ -1,27 +1,39 @@
-"""Credential/session primitives. Demo-grade for Phase 04; hardened in Phase 05.
+"""Credential/session primitives.
 
-PINs: pbkdf2_hmac(sha256) with per-employee random salt, stored as "salt$hash" hex.
+PINs: argon2id (argon2-cffi), per-password random salt.
 Session tokens: 32-byte URL-safe random; only the sha256 of the token is stored.
+Two token kinds: short-lived access (15 min) and rotating refresh (12 h).
 """
 
 import hashlib
-import hmac
 import secrets
 
+from argon2 import PasswordHasher
+from argon2 import exceptions as argon2_exceptions
 
-def hash_pin(pin: str, salt: bytes | None = None) -> str:
-    salt = salt or secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt, 120_000)
-    return f"{salt.hex()}${digest.hex()}"
+_hasher = PasswordHasher()  # argon2id defaults
 
 
-def verify_pin(pin: str, stored: str) -> bool:
-    try:
-        salt_hex, hash_hex = stored.split("$", 1)
-        expected = hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt_hex), 120_000)
-        return hmac.compare_digest(expected, bytes.fromhex(hash_hex))
-    except (ValueError, TypeError):
+def hash_pin(pin: str) -> str:
+    return _hasher.hash(pin)
+
+
+def verify_pin(pin: str, stored: str | None) -> bool:
+    if not stored:
         return False
+    try:
+        return _hasher.verify(stored, pin)
+    except argon2_exceptions.VerificationError:
+        return False
+    except argon2_exceptions.InvalidHash:
+        return False
+
+
+def needs_rehash(stored: str) -> bool:
+    try:
+        return _hasher.check_needs_rehash(stored)
+    except argon2_exceptions.InvalidHash:
+        return True
 
 
 def new_session_token() -> str:

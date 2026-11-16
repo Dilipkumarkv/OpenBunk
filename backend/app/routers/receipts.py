@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_current_employee, get_db_dep, paginate
+from ..deps import audit, get_current_employee, get_db_dep, paginate, require_roles
 from ..errors import ApiError
 from ..models import Employee, FuelProduct, FuelReceipt, StockMovement, Tank
 from ..schemas import FuelReceiptCreate, FuelReceiptOut
@@ -13,7 +13,7 @@ router = APIRouter(tags=["fuel-receipts"])
 
 
 @router.post("/fuel-receipts", response_model=FuelReceiptOut, status_code=status.HTTP_201_CREATED)
-def create_receipt(payload: FuelReceiptCreate, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def create_receipt(payload: FuelReceiptCreate, employee: Employee = Depends(require_roles("owner", "manager")), db: Session = Depends(get_db_dep)):
     tank = db.get(Tank, payload.tank_id)
     if tank is None or tank.station_id != employee.station_id:
         raise ApiError(404, "Tank not found")
@@ -54,7 +54,7 @@ def create_receipt(payload: FuelReceiptCreate, employee: Employee = Depends(get_
 def list_receipts(
     limit: int = Query(default=50),
     offset: int = Query(default=0),
-    employee: Employee = Depends(get_current_employee),
+    employee: Employee = Depends(require_roles("owner", "manager", "accountant", "auditor")),
     db: Session = Depends(get_db_dep),
 ):
     limit, offset = paginate(limit, offset)
