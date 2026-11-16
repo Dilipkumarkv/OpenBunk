@@ -2,8 +2,7 @@
 
 ## Current milestone
 
-UI prototype in-app (Phase 02), domain rules (Phase 03), backend/database (Phase 04) and
-auth/security (Phase 05) — complete. Next: integration (Phase 06).
+UI through backend integration (Phase 06) — complete. Next: testing/quality loops (Phase 07).
 
 ## Requirements
 
@@ -23,7 +22,8 @@ auth/security (Phase 05) — complete. Next: integration (Phase 06).
 - [x] Domain rules and tests (2026-11-16) — see Phase 03 below.
 - [x] API/database (2026-11-16) — see Phase 04 below.
 - [x] Auth/security (2026-11-16) — see Phase 05 below.
-- [ ] Integrations
+- [x] Integrations (2026-11-16) — see Phase 06 below (CSV import/export, print CSS, frontend↔API;
+      other integrations deliberately not supported in this environment).
 - [ ] CI and quality gates
 - [ ] Staging deployment
 - [ ] Release readiness
@@ -253,9 +253,47 @@ Seed: EMP-00 owner · EMP-01 manager · EMP-02 cashier · EMP-03 accountant · E
 - Cross-station isolation relies on pervasive station_id filtering (no RLS at DB level) — PG RLS could harden further
 - Offboarding is soft-delete only (by design; posted records immutable)
 
+## Phase 06 — Integrations, MCP & Skills (2026-11-16)
+
+**UI ↔ API wiring (live-verified in browser, 2026-11-16):** login → dashboard (live daily-sales +
+collections + recent sales), Shifts (draft/validate/close round-trip with Idempotency-Key +
+X-Reauth-Pin → server closes atomically, tank stock deducted), Fuel (tanks + stock from movement
+ledger), Credit (live balances + CSV import dry-run → commit), Reports (live tables + CSV download),
+Settings (/me, sign out, owner JSON export). Signed-out/offline fallback = clearly labeled sample data.
+
+**Defect found by E2E and fixed:** backend CORS `allow_headers` was missing `X-Reauth-Pin` →
+preflight 400 on every re-auth call → shift close could never succeed from a browser. Fixed in
+`backend/app/main.py`; CORS now allows it (+ `.env.example` preview origins).
+
+**Integrations (spec order):**
+
+1. CSV import/export — DONE (`/api/v1/export.csv?type=…`, `POST /credit/customers/import.csv`,
+   1 MB/500-row caps, dry-run default, audited; 5 tests) — UI card on Credit page
+2. Printable shift sheet — DONE as `@media print` CSS (hiding nav/actions) + ⎙ Print button;
+   true server-side PDF deferred until a generator is chosen
+3. Email/notification — NOT SUPPORTED (no provider configured) — not implemented, by policy
+4. Tally — NOT SUPPORTED (no mapping/test instance) — not implemented
+5. Dispenser hardware — NOT SUPPORTED (unknown make/model/protocol, no hardware) — not implemented
+6. Payment gateway — NOT SUPPORTED (not needed yet; would require tokenized SAQ-A design)
+
+**Frontend↔API map, MCP operating rules (read-only browser usage, no business-API MCP exposure,
+no secrets to model context, no MCP writes without explicit owner approval) and integration gaps**
+documented in `docs/integrations.md`. Project-local conventions captured in `AGENTS.md`.
+
+**Verification (all real):** backend pytest **43 passed** (38 + 5 CSV tests); frontend lint/type-check/
+test (30)/format/build exit 0; **browser E2E against live uvicorn+preview**: login → close shift
+(PIN re-auth) → "Shift closed … Revenue ₹ 71,415 · total 750 L" → Dashboard shows ₹ 71,415/750 L →
+Fuel shows 8,090 L / 10,860 L → Reports shows Diesel 420 L / Petrol 330 L / Total 750 L → Sign out →
+sample-data mode. Zero console errors. CORS defect caught only by doing this.
+
+**Known gaps:** sales entry UI missing; alerts/sales-trend illustrative; dip capture not implemented
+(variance shows —); CSV import shows summary, not full row-level error table; email/Tally/dispenser/
+gateway unimplemented by policy. Demo PINs remain 1234 until production seed policy is applied.
+
 ## Known limitations
 
-- Demo/sample data throughout; persistent backend exists but the UI is not wired to it yet.
+- Sample data remains in signed-out/demo mode by design; in live mode pages read the API
+  (closed shifts, recorded sales/receipts/ledger entries only).
 - Buttons that say demo/preview do not perform real business writes.
 - Security posture implemented but **not cleared for real data** — see docs/security-checklist.md
   (recovery flow, backup-restore drill, multi-instance rate limiting pending).

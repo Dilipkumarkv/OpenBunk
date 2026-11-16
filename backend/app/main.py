@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from .config import get_settings
 from .errors import api_error_handler, unhandled_error_handler, validation_error_handler, ApiError
 from .logging_config import configure_logging, request_id_ctx, get_logger
-from .routers import audit, auth, catalog, credit, export, health, receipts, reports, sales, shifts, staff, station
+from .routers import audit, auth, catalog, credit, csv_io, export, health, receipts, reports, sales, shifts, staff, station
 
 settings = get_settings()
 configure_logging()
@@ -47,7 +47,13 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "Idempotency-Key",
+            "X-Request-Id",
+            "X-Reauth-Pin",
+        ],
     )
 
     app.add_exception_handler(ApiError, api_error_handler)
@@ -68,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix="/api/v1")
     app.include_router(staff.router, prefix="/api/v1")
     app.include_router(export.router, prefix="/api/v1")
+    app.include_router(csv_io.router, prefix="/api/v1")
 
     return app
 

@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from './authContext'
 
 const NAV_ITEMS = [
   { to: '/', icon: '▦', label: 'Dashboard', end: true },
@@ -19,7 +20,16 @@ const CRUMBS: Record<string, string> = {
 
 export default function Layout() {
   const { pathname } = useLocation()
+  const { session, online, logout } = useAuth()
   const crumb = CRUMBS[pathname] ?? 'Dashboard'
+  const initials = session
+    ? session.employee.name
+        .split(' ')
+        .map((w) => w[0] ?? '')
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : 'DB'
 
   return (
     <div className="app">
@@ -61,11 +71,27 @@ export default function Layout() {
           </nav>
         </div>
         <div className="sidebottom">
-          <strong>Prototype environment</strong>
-          Sample data only · No real transactions
-          <br />
-          <br />
-          <span className="sidebottom-note">Open source · Self-hostable</span>
+          {session ? (
+            <>
+              <strong>Connected</strong>
+              {session.employee.name} · {session.employee.code} ({session.employee.role})
+              <br />
+              Station {session.station.code}
+              <br />
+              <button className="btn sidebutton" onClick={() => void logout()}>
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>{online ? 'Backend reachable' : 'Demo / offline'}</strong>
+              {online ? 'Sign in to persist real data.' : 'Showing sample data — not connected.'}
+              <br />
+              <Link className="btn sidebutton" to="/login">
+                Sign in
+              </Link>
+            </>
+          )}
         </div>
       </aside>
       <main>
@@ -75,8 +101,10 @@ export default function Layout() {
             <b>{crumb}</b>
           </div>
           <div className="topright">
-            <span className="live">● Demo mode</span>
-            <div className="avatar">DB</div>
+            <span className={session ? 'live' : 'live offline'}>
+              {session ? '● Connected' : online ? '● API online' : '● Offline demo'}
+            </span>
+            <div className="avatar">{initials}</div>
           </div>
         </header>
         <div className="content">

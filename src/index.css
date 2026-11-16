@@ -447,6 +447,73 @@ tr:last-child td {
 .check input {
   width: auto;
 }
+.reauth {
+  border: 1px solid var(--amber);
+  background: #fff4dd;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+.reauth label {
+  display: block;
+  font-size: 12px;
+  color: #65738a;
+  margin-bottom: 6px;
+}
+.reauth input {
+  width: 220px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+}
+
+/* Printable shift sheet */
+@media print {
+  .sidebar,
+  .topbar,
+  .actions,
+  .notice,
+  .formactions,
+  .toast,
+  .reauth,
+  .rollover {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .app {
+    display: block;
+  }
+  .content {
+    padding: 0;
+    max-width: none;
+  }
+  .card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    break-inside: avoid;
+  }
+}
+
+/* Login */
+.login-wrap {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  padding: 24px;
+}
+.login-card {
+  width: min(400px, 100%);
+  padding: 26px;
+}
+
+.live-tag {
+  color: var(--green);
+  font-weight: 700;
+}
 
 /* Notice / forms */
 .notice {

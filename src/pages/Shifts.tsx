@@ -1,5 +1,7 @@
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useToast } from '../components/toastContext'
+import { useAuth } from '../components/authContext'
+import { getJson, postJson, putJson, ApiHttpError, ApiOfflineError } from '../lib/api'
 import { computeShiftTotals, parseMeterReadingOrZero } from '../domain/shift'
 import {
   validateShiftReadings,
@@ -14,6 +16,7 @@ import { money } from '../lib/format'
 // - Live math is lenient: invalid/empty input is treated as 0 while typing.
 // - "Validate readings" is strict: empty/negative/closing<opening/zero price
 //   are reported as human-readable issues, inline.
+// When signed in, Validate/Close also round-trip the backend (server is authoritative).
 const INITIAL_INPUTS: ShiftValidationInput = {
   petrolOpening: '12450',
   petrolClosing: '12780',
@@ -36,17 +39,34 @@ const FIELD_IDS: Record<keyof ShiftValidationInput, string> = {
   upiCollected: 'upi',
 }
 
+interface NozzleIds {
+  petrol: string
+  diesel: string
+}
+
+interface ServerIssue {
+  field: string
+  message: string
+}
+
 export default function Shifts() {
   const toast = useToast()
+  const { session } = useAuth()
   const [inputs, setInputs] = useState<ShiftValidationInput>(INITIAL_INPUTS)
   const [issues, setIssues] = useState<ValidationIssue[]>([])
-  // Explicit rollover authorization — never inferred from readings.
+  const [serverIssues, setServerIssues] = useState<ServerIssue[]>([])
   const [rollover, setRollover] = useState({
     petrol: false,
     diesel: false,
     petrolValue: '100000',
     dieselValue: '100000',
   })
+  const [nozzleIds, setNozzleIds] = useState<NozzleIds | null>(null)
+  const [draftId, setDraftId] = useState<string | null>(null)
+  const [closingPin, setClosingPin] = useState('')
+  const [confirmingClose, setConfirmingClose] = useState(false)
+  const [closedInfo, setClosedInfo] = useState<{ revenue: string; litres: string } | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const onField = (field: keyof ShiftValidationInput) => (event: ChangeEvent<HTMLInputElement>) =>
     setInputs((prev) => ({ ...prev, [field]: event.target.value }))
@@ -84,7 +104,83 @@ export default function Shifts() {
     [totals.totalValue, inputs.cashCollected, inputs.upiCollected],
   )
 
-  const onValidate = () => {
+  // Fetch nozzle ids once signed in (needed to sync readings to the API)
+  useEffect(() => {
+    if (!session) {
+      setNozzleIds(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const nozzles = await getJson<Array<{ id: string; label: string }>>('/api/v1/nozzles')
+        if (cancelled) return
+        const petrol = nozzles.find((n) => n.label.toUpperCase() === 'P1')
+        const diesel = nozzles.find((n) => n.label.toUpperCase() === 'D1')
+        setNozzleIds(petrol && diesel ? { petrol: petrol.id, diesel: diesel.id } : null)
+      } catch {
+        if (!cancelled) toast('Backend not reachable — Shifts stays in local demo mode.')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
+  // Lazily find or create this afternoon's draft shift
+  const ensureDraft = useCallback(async (): Promise<string | null> => {
+    if (draftId) return draftId
+    if (!session) return null
+    const drafts = await getJson<Array<{ id: string; kind: string }>>(
+      '/api/v1/shifts?status=draft&kind=afternoon&limit=1',
+    )
+    if (drafts.length > 0) {
+      setDraftId(drafts[0].id)
+      return drafts[0].id
+    }
+    const created = await postJson<{ id: string }>('/api/v1/shifts', { kind: 'afternoon' })
+    setDraftId(created.id)
+    return created.id
+  }, [draftId, session])
+
+  const readingsPayload = useCallback(() => {
+    if (!nozzleIds) return null
+    return {
+      readings: [
+        {
+          nozzle_id: nozzleIds.petrol,
+          opening_litres: inputs.petrolOpening || '0',
+          closing_litres: inputs.petrolClosing || '0',
+          unit_price: inputs.petrolPrice || '0',
+        },
+        {
+          nozzle_id: nozzleIds.diesel,
+          opening_litres: inputs.dieselOpening || '0',
+          closing_litres: inputs.dieselClosing || '0',
+          unit_price: inputs.dieselPrice || '0',
+        },
+      ],
+    }
+  }, [
+    inputs.petrolOpening,
+    inputs.petrolClosing,
+    inputs.petrolPrice,
+    inputs.dieselOpening,
+    inputs.dieselClosing,
+    inputs.dieselPrice,
+    nozzleIds,
+  ])
+
+  const syncToApi = useCallback(async (): Promise<string | null> => {
+    const id = await ensureDraft()
+    const payload = readingsPayload()
+    if (!id || !payload) return null
+    await putJson(`/api/v1/shifts/${id}/readings`, payload)
+    return id
+  }, [ensureDraft, readingsPayload])
+
+  const onValidate = async () => {
     const found = validateShiftReadings(inputs, {
       petrol: rollover.petrol,
       diesel: rollover.diesel,
@@ -92,11 +188,106 @@ export default function Shifts() {
       dieselRolloverValue: Number(rollover.dieselValue),
     })
     setIssues(found)
+
+    if (session) {
+      setBusy(true)
+      try {
+        const id = await syncToApi()
+        if (id) {
+          const server = await postJson<{ valid: boolean; issues: ServerIssue[] }>(
+            `/api/v1/shifts/${id}/validate`,
+            {
+              rollover: {
+                petrol: rollover.petrol,
+                diesel: rollover.diesel,
+                petrol_rollover_value: rollover.petrol ? rollover.petrolValue : undefined,
+                diesel_rollover_value: rollover.diesel ? rollover.dieselValue : undefined,
+              },
+            },
+          )
+          setServerIssues(server.issues)
+          toast(
+            server.valid && found.length === 0
+              ? 'Validation passed (server + local agree).'
+              : `Validation found issue(s): ${server.issues.length + found.length}.`,
+          )
+          return
+        }
+      } catch (error) {
+        if (error instanceof ApiHttpError) {
+          toast(`Backend rejected the readings (${error.status}). Local check shown below.`)
+        } else {
+          toast('Backend not reachable — showing local validation only.')
+        }
+      } finally {
+        setBusy(false)
+      }
+    }
+
     toast(
       found.length === 0
         ? 'Validation passed: readings checked.'
         : `Validation found ${found.length} issue(s) — see details below.`,
     )
+  }
+
+  const onSaveDraft = async () => {
+    if (!session) {
+      toast('Demo only: draft is not persisted.')
+      return
+    }
+    setBusy(true)
+    try {
+      await syncToApi()
+      toast('Draft saved to the OpenBunk API.')
+    } catch {
+      toast('Backend not reachable — draft kept locally only.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onConfirmClose = async () => {
+    if (!session) return
+    setBusy(true)
+    try {
+      const id = await syncToApi()
+      if (!id) throw new ApiOfflineError()
+      const result = await postJson<{
+        status: string
+        revenue_total: string
+        total_litres: string
+      }>(
+        `/api/v1/shifts/${id}/close`,
+        {
+          rollover: {
+            petrol: rollover.petrol,
+            diesel: rollover.diesel,
+            petrol_rollover_value: rollover.petrol ? rollover.petrolValue : undefined,
+            diesel_rollover_value: rollover.diesel ? rollover.dieselValue : undefined,
+          },
+        },
+        {
+          'Idempotency-Key': crypto.randomUUID(),
+          'X-Reauth-Pin': closingPin,
+        },
+      )
+      setClosedInfo({ revenue: result.revenue_total, litres: result.total_litres })
+      setConfirmingClose(false)
+      setClosingPin('')
+      toast(`Shift closed on API — revenue ${money(Number(result.revenue_total))}.`)
+    } catch (error) {
+      if (error instanceof ApiHttpError) {
+        if (error.status === 401) toast('PIN rejected — close aborted.')
+        else if (error.status === 409) toast('Shift already closed.')
+        else if (error.status === 422) toast('Server validation failed — check readings.')
+        else toast(`Close failed (${error.status}).`)
+      } else {
+        toast('Backend not reachable — close aborted. No data was written.')
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   const fieldIssue = (field: keyof ShiftValidationInput) =>
@@ -136,18 +327,36 @@ export default function Shifts() {
           <button className="btn" onClick={() => toast('Shift register exported (demo).')}>
             Export shift sheet
           </button>
+          <button className="btn" onClick={() => window.print()}>
+            ⎙ Print
+          </button>
         </div>
       </div>
 
       <div className="notice">
         Assisted entry: enter opening and closing totalizers. Sales volume and value are calculated
         locally; collections are reconciled against expected sales.
+        {session
+          ? ' Signed in — readings persist to the OpenBunk API.'
+          : ' Not signed in — nothing persists.'}
       </div>
+
+      {closedInfo && (
+        <div
+          className="notice"
+          style={{ background: '#e8f8f2', borderColor: '#bfe8d8', color: '#13865f' }}
+        >
+          ✓ Shift closed on the API. Revenue ₹ {Number(closedInfo.revenue).toLocaleString('en-IN')}{' '}
+          · total {Number(closedInfo.litres).toLocaleString('en-IN')} L dispensed.
+        </div>
+      )}
 
       <div className="card">
         <div className="cardhead">
           <h3>Shift closing · Afternoon</h3>
-          <span className="pill amber">Draft</span>
+          <span className={closedInfo ? 'pill green' : 'pill amber'}>
+            {closedInfo ? 'Closed' : 'Draft'}
+          </span>
         </div>
         <div className="formgrid">
           <div className="field">
@@ -175,6 +384,19 @@ export default function Shifts() {
           {field('cashCollected', 'Cash collected (₹)')}
           {field('upiCollected', 'UPI / card collected (₹)')}
         </div>
+
+        {serverIssues.length > 0 && (
+          <div className="field-error" style={{ marginTop: 12 }} role="alert">
+            <b>Server validation:</b>
+            <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+              {serverIssues.map((issue, index) => (
+                <li key={index}>
+                  {issue.field}: {issue.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <fieldset className="rollover">
           <legend>Meter rollover / reset (authorized only)</legend>
@@ -227,22 +449,59 @@ export default function Shifts() {
             </div>
           </div>
         </fieldset>
+
+        {confirmingClose && (
+          <div className="reauth">
+            <label htmlFor="reauth-pin">
+              Confirm your PIN to close this shift (re-authentication)
+            </label>
+            <input
+              id="reauth-pin"
+              type="password"
+              value={closingPin}
+              onChange={(event) => setClosingPin(event.target.value)}
+              autoFocus
+              autoComplete="current-password"
+            />
+            <div className="formactions" style={{ marginTop: 10 }}>
+              <button
+                className="btn primary"
+                onClick={() => void onConfirmClose()}
+                disabled={closingPin.length < 4 || busy}
+              >
+                Confirm close shift
+              </button>
+              <button className="btn" onClick={() => setConfirmingClose(false)} disabled={busy}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="formactions">
           <button
             className="btn primary"
-            onClick={() => toast('Demo only: draft is not persisted.')}
+            onClick={() => void onSaveDraft()}
+            disabled={busy || !!closedInfo}
           >
             Save draft
           </button>
-          <button className="btn" onClick={onValidate}>
+          <button className="btn" onClick={() => void onValidate()} disabled={busy}>
             Validate readings
           </button>
-          <button
-            className="btn"
-            onClick={() => toast('Demo: closing requires reconciliation in production.')}
-          >
-            Close shift
-          </button>
+          {!closedInfo &&
+            (session ? (
+              <button className="btn" onClick={() => setConfirmingClose(true)} disabled={busy}>
+                Close shift
+              </button>
+            ) : (
+              <button
+                className="btn"
+                onClick={() => toast('Demo: sign in to close a shift for real.')}
+              >
+                Close shift
+              </button>
+            ))}
         </div>
       </div>
 
