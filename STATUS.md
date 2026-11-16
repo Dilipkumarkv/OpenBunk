@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-UI through the CI deployment rehearsal (Phase 08) — complete and CI-green. Next: release readiness (Phase 09).
+All nine phases complete. Verdict: **Prototype v0.9 — CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md).
 
 ## Requirements
 
@@ -26,7 +26,8 @@ UI through the CI deployment rehearsal (Phase 08) — complete and CI-green. Nex
       other integrations deliberately not supported in this environment).
 - [x] CI and quality gates (2026-11-16) — see Phase 07 below.
 - [x] Staging deployment (2026-11-16) — see Phase 08 below (CI rehearsal green; real staging host pending owner provisioning).
-- [ ] Release readiness
+- [x] Release readiness review (2026-11-16) — report at `docs/release-readiness.md`; verdict:
+      Prototype, owner release approval pending. Not a production sign-off.
 
 ## Phase 01 — Repository Foundation (2026-11-15)
 
@@ -373,6 +374,17 @@ recorded in STATUS per protocol.
 are set by nginx but unverified live), backup scheduling/monitoring/alerting, actual station cutover,
 restore drill against Postgres (SQLite drill done; PG drill pending staging). **Production is
 disabled/locked behind owner approval.**
+
+## Phase 09 — Release Readiness (2026-11-16)
+
+Verdict: **Prototype v0.9 — NOT cleared for pilot/production** (release-readiness report at
+`docs/release-readiness.md`). Gates passed: roles tested, atomic/idempotent close, reconciliation
+policy, backup/restore drill, CI audit gates, runbooks, operator guide. Failing/open gates: no
+Android device test, no staging host (HTTPS unverified), no third-party pen test, no explicit owner
+release approval (spec requires it). One endpoint (`/tanks/{id}/adjustments`) had no test — now
+covered (`tests/test_adjustments.py`, 3 tests; 60 backend tests total).
+
+**Owner must decide next:** remain prototype · provision pilot staging · production (requires all).
 
 ## Known limitations
 
