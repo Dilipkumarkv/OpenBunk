@@ -1,0 +1,59 @@
+# Local/staging-like single-host stack. NOT a production blueprint as-is —
+# see docs/deployment.md (HTTPS, secrets, backups required for real deployments).
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openbunk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openbunk-dev-only}
+      POSTGRES_DB: openbunk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbunk -d openbunk"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # never publish the database port; API talks to it over the internal network
+    networks: [internal]
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://openbunk:${POSTGRES_PASSWORD:-openbunk-dev-only}@db:5432/openbunk
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      RATE_LIMIT_PER_MINUTE: "20"
+      # set OPENBUNK_SEED_PIN=1234 only for demo environments; never in production
+      OPENBUNK_SEED_PIN: ${OPENBUNK_SEED_PIN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read() else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks: [internal]
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [internal]
+
+volumes:
+  pgdata:
+
+networks:
+  internal:

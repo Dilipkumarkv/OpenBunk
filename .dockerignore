@@ -1,0 +1,26 @@
+# VCS / editors
+.git
+.gitignore
+.vscode
+.idea
+
+# Node / frontend
+node_modules
+dist
+coverage
+
+# Python / backend
+backend/.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+backend/*.db
+
+# Local env / data
+.env
+.env.local
+*.db
+backups
+
+# Docs not needed in image (optional to keep)
+docs

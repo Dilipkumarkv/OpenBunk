@@ -24,4 +24,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if settings.is_production and settings.DATABASE_URL.startswith("sqlite"):
+        # fail fast: a production deployment must not silently run on a local file database
+        raise RuntimeError(
+            "ENVIRONMENT=production requires a non-SQLite DATABASE_URL (e.g. postgresql+psycopg://…)"
+        )
+    return settings

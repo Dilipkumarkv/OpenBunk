@@ -40,6 +40,43 @@ jobs:
       - name: Build
         run: npm run build
 
+  compose:
+    name: Compose stack rehearsal
+    runs-on: ubuntu-latest
+    env:
+      OPENBUNK_SEED_PIN: "1234"
+      POSTGRES_PASSWORD: ci-staging-only
+      ENVIRONMENT: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build stack
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d --wait
+
+      - name: Seed demo station (rehearsal only)
+        run: docker compose exec -T api python -m app.seed
+
+      - name: Verify web, proxy and API
+        run: |
+          curl --fail --retry 10 --retry-delay 2 http://localhost:8080/healthz
+          curl --fail --retry 10 --retry-delay 2 http://localhost:8080/api/readiness
+          curl --fail --retry 10 --retry-delay 2 -s http://localhost:8080/ | grep -i openbunk
+          curl --fail -X POST http://localhost:8080/api/v1/session \
+            -H 'Content-Type: application/json' \
+            -d '{"station_code":"OB-001","employee_code":"EMP-00","pin":"1234"}' | grep -q access_token
+
+      - name: Logs must not contain secrets
+        run: |
+          ! docker compose logs api | grep -iE 'argon2|pin_hash|password|secret'
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
   backend:
     name: Backend tests (PostgreSQL)
     runs-on: ubuntu-latest
