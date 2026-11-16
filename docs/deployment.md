@@ -60,7 +60,7 @@ Verify:
 
 ```bash
 curl -I https://staging.example.com/healthz        # 200 (web container)
-curl https://staging.example.com/api/readiness     # {"status":"ready","database":"ok"}
+curl https://staging.example.com/api/v1/readiness     # {"status":"ready","database":"ok"}
 curl -X POST https://staging.example.com/api/v1/session -H 'Content-Type: application/json' \
      -d '{"station_code":"OB-001","employee_code":"OWNER-1","pin":"<set at provision-time>"}'  # 201 (only if seeded)
 ```
@@ -74,7 +74,7 @@ boot**, sign in once as owner, create your own owner user (`/api/v1/employees`),
 1. `git fetch && git checkout <release-ref>`
 2. **`python -m app.backup create backups/pre-<ref>.json`** (or `docker compose exec api python -m app.backup create /data/pre.json`)
 3. `docker compose build && docker compose up -d --wait`
-4. Verify: `curl https://<host>/api/readiness` = ready; spot-check `/api/v1/reports/daily-sales?date=<today>`.
+4. Verify: `curl https://<host>/api/v1/readiness` = ready; spot-check `/api/v1/reports/daily-sales?date=<today>`.
 5. Rollback: `git checkout <previous-ref> && docker compose build && docker compose up -d --wait`.
    App rollback is safe because released schema is additive-only; if a destructive migration was ever
    applied, restore from the §4.2 backup instead (see §7).
