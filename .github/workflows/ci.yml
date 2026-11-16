@@ -22,6 +22,9 @@ jobs:
       - name: Install dependencies (deterministic)
         run: npm ci
 
+      - name: Dependency vulnerability scan (high+)
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 
@@ -67,9 +70,12 @@ jobs:
           python-version: '3.14'
 
       - name: Install dependencies
-        run: python -m pip install --no-cache-dir -r backend/requirements.txt
+        run: python -m pip install --no-cache-dir -r backend/requirements.txt pip-audit
 
-      - name: Migrate (from empty database)
+      - name: Dependency vulnerability scan
+        run: python -m pip_audit --requirement backend/requirements.txt --strict
+
+      - name: Migration check (from empty database)
         run: python -m alembic upgrade head
         working-directory: backend
 

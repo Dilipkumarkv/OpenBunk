@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-UI through backend integration (Phase 06) — complete. Next: testing/quality loops (Phase 07).
+UI through quality gates (Phase 07) — complete. Next: deployment (Phase 08) or release readiness (Phase 09).
 
 ## Requirements
 
@@ -24,7 +24,7 @@ UI through backend integration (Phase 06) — complete. Next: testing/quality lo
 - [x] Auth/security (2026-11-16) — see Phase 05 below.
 - [x] Integrations (2026-11-16) — see Phase 06 below (CSV import/export, print CSS, frontend↔API;
       other integrations deliberately not supported in this environment).
-- [ ] CI and quality gates
+- [x] CI and quality gates (2026-11-16) — see Phase 07 below.
 - [ ] Staging deployment
 - [ ] Release readiness
 
@@ -289,6 +289,52 @@ sample-data mode. Zero console errors. CORS defect caught only by doing this.
 **Known gaps:** sales entry UI missing; alerts/sales-trend illustrative; dip capture not implemented
 (variance shows —); CSV import shows summary, not full row-level error table; email/Tally/dispenser/
 gateway unimplemented by policy. Demo PINs remain 1234 until production seed policy is applied.
+
+## Phase 07 — Testing, Quality Gates & Bounded Loops (2026-11-16)
+
+**Spec tests → implemented (all critical scenarios covered):**
+
+| Scenario                                                       | Result                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| closing < opening rejected                                     | ✓ API 422 + inline UI error                                                                                                                                                                                                                                                        |
+| duplicate close idempotent                                     | ✓ replay test + UI close                                                                                                                                                                                                                                                           |
+| cash/UPI/card/credit mismatch → variance + authorized override | ✓ **new rule**: close with `collections` requires matching or `override_reason` (422 `override_required` otherwise; allowed with reason; audited as `shift.close_variance_override`); frontend now requires override reason before close confirmed and passes collections + reason |
+| concurrent shift edits                                         | ✓ **new**: `shifts.version` optimistic lock (migration `c8c8a8abb21c`); stale `expected_version` → 409 with `current_version`; UI sends expected_version and auto-reloads on 409                                                                                                   |
+| network interruption → draft preserved + unsynced state        | ✓ **new**: sessionStorage draft persistence + "Unsynced draft restored…" banner; clears on successful sync/close                                                                                                                                                                   |
+| unauthorized role → 403, no leakage                            | ✓ existing + auditor read-only                                                                                                                                                                                                                                                     |
+| tank receipt + sale ledger → expected book stock               | ✓ (8,090 / 10,860 L asserted)                                                                                                                                                                                                                                                      |
+| credit receipt reduces outstanding exactly once                | ✓ test added                                                                                                                                                                                                                                                                       |
+| backup restore recovers verified dataset                       | ✓ **new**: `app/backup.py` (CLI + library); JSON dump/restore roundtrip test incl. PIN-hash survival                                                                                                                                                                               |
+
+**Quality gates added to CI:** `npm audit --audit-level=high` (frontend), `pip-audit --strict`
+(backend, reported clean locally), migration check renamed and retained (empty-DB upgrade is the
+CI pytest entry point). Branch protection on `main` NOT enabled — owner decision (see note).
+
+**Verification (all real, run today):**
+
+- frontend: lint 0 · type-check 0 · tests **49/49 (9 files)** (new: navigation, inline-error wiring,
+  a11y landmark/labels, stock projection, credit status, draft persistence round-trip)
+- backend: **57/57 pytest** (was 43; +test_domain 7, +test_phase07_scenarios 6, +test_backup_restore 1)
+- migration round-trip ✓ (3 revisions: initial, auth+login_attempts, shifts.version)
+- CI re-check needed after push; see run below
+
+**Defects found & fixed during this phase (honest log):**
+
+- `func.count().select_from` invalid SQLAlchemy call → fixed to `select(func.count()).select_from`
+- jsdom tests accumulate DOM across files (no globals cleanup) → duplicate-element failures;
+  fixed with RTL `cleanup()` in test setup
+- Tightened RTL queries to accessible names; hash reset between UI tests
+- **Stale build served during first E2E pass** — close succeeded without override because vite
+  preview served the pre-Phase-07 bundle; rebuilt and re-verified (confirm disabled → enabled after
+  reason → close 200 → variance override audited as `shift.close_variance_override`)
+- Vitest "Cannot find module node:fs" assumption removed; debug scaffolding deleted (49 tests clean)
+
+**Known exclusions (explicit, per spec):**
+
+- Automated browser E2E not in CI (no headless browser on ubuntu-latest); API-level E2E + manual
+  browser verification used instead; visual/360px regression not machine-verified
+- Branch protection on `main` not enabled (would change how you can push — asked separately)
+- Load/stress/hardware tests: none (no hardware, no multi-station data)
 
 ## Known limitations
 

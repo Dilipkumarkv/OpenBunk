@@ -4,6 +4,7 @@ import { useAuth } from '../components/authContext'
 import { getJson, request, ApiHttpError, ApiOfflineError } from '../lib/api'
 import { money } from '../lib/format'
 import { creditAccounts } from '../data/sampleData'
+import { CREDIT_STATUS_LABEL, CREDIT_STATUS_TONE, creditLimitStatus } from '../domain/credit'
 
 interface ApiCustomer {
   id: string
@@ -58,10 +59,9 @@ export default function Credit() {
           rows: customers.map((c): CreditRow => {
             const limit = Number(c.credit_limit)
             const balance = Number(c.balance ?? 0)
-            const status =
-              balance > limit ? 'Over limit' : balance >= limit * 0.8 ? 'Near limit' : 'Active'
-            const tone: CreditRow['tone'] =
-              balance > limit ? 'red' : balance >= limit * 0.8 ? 'amber' : 'green'
+            const statusEnum = creditLimitStatus(balance, limit)
+            const status = CREDIT_STATUS_LABEL[statusEnum]
+            const tone = CREDIT_STATUS_TONE[statusEnum]
             return {
               customer: c.name,
               account: c.account_code,

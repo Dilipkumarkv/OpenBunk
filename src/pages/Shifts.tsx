@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'rea
 import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { getJson, postJson, putJson, ApiHttpError, ApiOfflineError } from '../lib/api'
+import { clearShiftDraft, loadShiftDraft, saveShiftDraft } from '../lib/draft'
 import { computeShiftTotals, parseMeterReadingOrZero } from '../domain/shift'
 import {
   validateShiftReadings,
@@ -63,13 +64,36 @@ export default function Shifts() {
   })
   const [nozzleIds, setNozzleIds] = useState<NozzleIds | null>(null)
   const [draftId, setDraftId] = useState<string | null>(null)
+  const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [closingPin, setClosingPin] = useState('')
   const [confirmingClose, setConfirmingClose] = useState(false)
   const [closedInfo, setClosedInfo] = useState<{ revenue: string; litres: string } | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [draftRestoredAt, setDraftRestoredAt] = useState<string | null>(null)
+  const [needsRefresh, setNeedsRefresh] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const onField = (field: keyof ShiftValidationInput) => (event: ChangeEvent<HTMLInputElement>) =>
     setInputs((prev) => ({ ...prev, [field]: event.target.value }))
+
+  // Restore an unsynced draft on mount (network interruption must not lose entries)
+  useEffect(() => {
+    const draft = loadShiftDraft(sessionStorage)
+    if (draft) {
+      setInputs(draft.inputs as unknown as ShiftValidationInput)
+      setRollover(draft.rollover)
+      setDraftRestoredAt(draft.savedAt)
+    }
+  }, [])
+
+  // Persist the draft on every change
+  useEffect(() => {
+    saveShiftDraft(sessionStorage, {
+      inputs: inputs as unknown as Record<string, string>,
+      rollover,
+      savedAt: new Date().toISOString(),
+    })
+  }, [inputs, rollover])
 
   const parsedRollover = useMemo(
     () => ({
@@ -128,25 +152,30 @@ export default function Shifts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
-  // Lazily find or create this afternoon's draft shift
+  // Lazily find or create this afternoon's draft shift, tracking its version (optimistic lock)
   const ensureDraft = useCallback(async (): Promise<string | null> => {
     if (draftId) return draftId
     if (!session) return null
-    const drafts = await getJson<Array<{ id: string; kind: string }>>(
+    const drafts = await getJson<Array<{ id: string; kind: string; version: number }>>(
       '/api/v1/shifts?status=draft&kind=afternoon&limit=1',
     )
     if (drafts.length > 0) {
       setDraftId(drafts[0].id)
+      setDraftVersion(drafts[0].version)
       return drafts[0].id
     }
-    const created = await postJson<{ id: string }>('/api/v1/shifts', { kind: 'afternoon' })
+    const created = await postJson<{ id: string; version: number }>('/api/v1/shifts', {
+      kind: 'afternoon',
+    })
     setDraftId(created.id)
+    setDraftVersion(created.version)
     return created.id
   }, [draftId, session])
 
   const readingsPayload = useCallback(() => {
     if (!nozzleIds) return null
     return {
+      expected_version: draftVersion,
       readings: [
         {
           nozzle_id: nozzleIds.petrol,
@@ -170,14 +199,29 @@ export default function Shifts() {
     inputs.dieselClosing,
     inputs.dieselPrice,
     nozzleIds,
+    draftVersion,
   ])
 
   const syncToApi = useCallback(async (): Promise<string | null> => {
     const id = await ensureDraft()
     const payload = readingsPayload()
     if (!id || !payload) return null
-    await putJson(`/api/v1/shifts/${id}/readings`, payload)
-    return id
+    try {
+      const saved = await putJson<{ version: number }>(`/api/v1/shifts/${id}/readings`, payload)
+      setDraftVersion(saved.version)
+      // draft is safely on the server — drop the offline copy
+      clearShiftDraft(sessionStorage)
+      setDraftRestoredAt(null)
+      return id
+    } catch (error) {
+      if (error instanceof ApiHttpError && error.status === 409) {
+        setNeedsRefresh(true)
+        toast('Another session updated this shift — reloading.')
+        window.setTimeout(() => window.location.reload(), 1500)
+      }
+      throw error
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ensureDraft, readingsPayload])
 
   const onValidate = async () => {
@@ -249,6 +293,12 @@ export default function Shifts() {
 
   const onConfirmClose = async () => {
     if (!session) return
+    // variance must be resolved or explicitly overridden — never silently accepted
+    if (reconciliation.status !== 'balanced' && !overrideReason.trim()) {
+      toast('Variance must be resolved, or enter an override reason to close with variance.')
+      return
+    }
+
     setBusy(true)
     try {
       const id = await syncToApi()
@@ -266,6 +316,11 @@ export default function Shifts() {
             petrol_rollover_value: rollover.petrol ? rollover.petrolValue : undefined,
             diesel_rollover_value: rollover.diesel ? rollover.dieselValue : undefined,
           },
+          collections: {
+            cash: inputs.cashCollected || '0',
+            upi: inputs.upiCollected || '0',
+          },
+          override_reason: reconciliation.status !== 'balanced' ? overrideReason.trim() : undefined,
         },
         {
           'Idempotency-Key': crypto.randomUUID(),
@@ -279,8 +334,9 @@ export default function Shifts() {
     } catch (error) {
       if (error instanceof ApiHttpError) {
         if (error.status === 401) toast('PIN rejected — close aborted.')
-        else if (error.status === 409) toast('Shift already closed.')
-        else if (error.status === 422) toast('Server validation failed — check readings.')
+        else if (error.status === 409) toast('Shift already closed (or changed elsewhere).')
+        else if (error.status === 422)
+          toast('Server rejected the close — variance not authorized or readings invalid.')
         else toast(`Close failed (${error.status}).`)
       } else {
         toast('Backend not reachable — close aborted. No data was written.')
@@ -348,6 +404,26 @@ export default function Shifts() {
         >
           ✓ Shift closed on the API. Revenue ₹ {Number(closedInfo.revenue).toLocaleString('en-IN')}{' '}
           · total {Number(closedInfo.litres).toLocaleString('en-IN')} L dispensed.
+        </div>
+      )}
+
+      {draftRestoredAt && !closedInfo && (
+        <div className="notice">
+          ⟲ Unsynced draft restored from{' '}
+          {new Date(draftRestoredAt).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+          . It syncs to the server when you save or validate.
+        </div>
+      )}
+
+      {needsRefresh && (
+        <div
+          className="notice"
+          style={{ background: '#fff4dd', borderColor: '#f0d9a8', color: '#a96b0c' }}
+        >
+          This shift was changed in another session — reloading…
         </div>
       )}
 
@@ -463,11 +539,28 @@ export default function Shifts() {
               autoFocus
               autoComplete="current-password"
             />
+            {reconciliation.status !== 'balanced' && (
+              <div className="field" style={{ marginTop: 12, maxWidth: 340 }}>
+                <label htmlFor="override-reason">
+                  Override reason (required — variance {money(reconciliation.variance)})
+                </label>
+                <input
+                  id="override-reason"
+                  value={overrideReason}
+                  onChange={(event) => setOverrideReason(event.target.value)}
+                  placeholder="e.g. Manager approved short collection"
+                />
+              </div>
+            )}
             <div className="formactions" style={{ marginTop: 10 }}>
               <button
                 className="btn primary"
                 onClick={() => void onConfirmClose()}
-                disabled={closingPin.length < 4 || busy}
+                disabled={
+                  closingPin.length < 4 ||
+                  busy ||
+                  (reconciliation.status !== 'balanced' && overrideReason.trim() === '')
+                }
               >
                 Confirm close shift
               </button>

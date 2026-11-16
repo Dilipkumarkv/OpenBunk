@@ -162,6 +162,8 @@ class MeterReadingIn(BaseModel):
 
 class ReadingsUpsert(BaseModel):
     readings: list[MeterReadingIn]
+    # optimistic lock: when supplied, mismatch with the shift's current version → 409
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 class MeterReadingOut(ORMModel):
@@ -182,6 +184,7 @@ class ShiftOut(ORMModel):
     opened_at: datetime
     closed_at: datetime | None
     revenue_total: Decimal | None
+    version: int
 
 
 class ShiftDetailOut(ShiftOut):
@@ -197,6 +200,10 @@ class RolloverAuthorization(BaseModel):
 
 class ShiftClose(BaseModel):
     rollover: RolloverAuthorization = RolloverAuthorization()
+    # optional: collections by tender; when provided, close enforces reconciliation policy
+    collections: dict[str, Decimal] | None = None
+    # required to close when collections are provided and |variance| > tolerance (authorized override)
+    override_reason: str | None = Field(default=None, max_length=300)
 
 
 class ValidationIssue(BaseModel):

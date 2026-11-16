@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, Query, status
 from sqlalchemy.orm import Session
 
 from ..deps import audit, get_current_employee, get_db_dep, paginate, require_reauth, require_roles
-from ..domain import compute_volume, round2
+from ..domain import compute_volume, reconcile, round2
 from ..errors import ApiError
 from ..idempotency import replay_if_present, store
 from ..models import Employee, FuelProduct, MeterReading, Nozzle, Shift, StockMovement, utcnow
@@ -103,6 +103,12 @@ def upsert_readings(shift_id: UUID, payload: ReadingsUpsert, employee: Employee 
     shift = _get_shift(db, shift_id, employee.station_id)
     if shift.status != "draft":
         raise ApiError(409, "Shift is closed; readings are immutable")
+    if payload.expected_version is not None and payload.expected_version != shift.version:
+        raise ApiError(
+            409,
+            "Shift was modified by another session — refresh before saving",
+            details={"current_version": shift.version, "expected_version": payload.expected_version},
+        )
 
     nozzle_ids = {r.nozzle_id for r in payload.readings}
     nozzles = {n.id: n for n in db.query(Nozzle).filter(Nozzle.station_id == employee.station_id, Nozzle.id.in_(nozzle_ids)).all()}
@@ -133,13 +139,14 @@ def upsert_readings(shift_id: UUID, payload: ReadingsUpsert, employee: Employee 
                     recorded_by=employee.id,
                 )
             )
+    shift.version += 1
     audit(
         db,
         station_id=employee.station_id,
         action="shift.readings_recorded",
         entity_type="shift",
         entity_id=shift.id,
-        payload={"count": len(payload.readings)},
+        payload={"count": len(payload.readings), "version": shift.version},
         actor=employee.id,
     )
     db.commit()
@@ -267,10 +274,35 @@ def close_shift(
                     )
                 )
 
+        # reconciliation policy: if collections are supplied, variance must be resolved or
+        # explicitly authorized with override_reason — never silently accepted
+        if payload.collections:
+            recon = reconcile(total_revenue, list(payload.collections.values()))
+            variance = Decimal(recon["variance"])
+            override = (payload.override_reason or "").strip()
+            if abs(variance) > Decimal("1.00") and not override:
+                raise ApiError(
+                    422,
+                    "Collections do not reconcile with expected sales — resolve or provide override_reason",
+                    details={**recon, "override_required": True},
+                )
+            if override:
+                audit(
+                    db,
+                    station_id=employee.station_id,
+                    action="shift.close_variance_override",
+                    entity_type="shift",
+                    entity_id=shift.id,
+                    reason=override,
+                    payload=recon,
+                    actor=employee.id,
+                )
+
         shift.status = "closed"
         shift.closed_at = utcnow()
         shift.closed_by = employee.id
         shift.revenue_total = round2(total_revenue)
+        shift.version += 1
         audit(
             db,
             station_id=employee.station_id,

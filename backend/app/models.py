@@ -128,6 +128,7 @@ class Shift(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_by: Mapped[UUID | None] = mapped_column(ForeignKey("employees.id"))
     revenue_total: Mapped[Decimal | None] = mapped_column(MONEY)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     readings: Mapped[list["MeterReading"]] = relationship(back_populates="shift")
 
