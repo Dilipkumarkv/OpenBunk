@@ -450,6 +450,15 @@ was performed; the release label remains **Prototype v0.9**.
 **Not verified in this environment:** Docker/Compose (no Docker installed locally), PostgreSQL
 backup/restore outside CI, browser/print/screen-reader passes, Android device, host-level staging.
 
+**CI (GitHub Actions, verified 2026-11-16):** run `43836193844` on commit `2537e8f` — **all three jobs
+green**: lint/type-check/test/format/build; compose stack rehearsal (dedicated `migrate` service exits
+0, seed + login with the new 6-digit PIN, readiness, no secrets in logs); backend on PostgreSQL 16
+(77 tests, `alembic check`, advisory-lock migration runner, native `pg_dump`/`pg_restore` roundtrip).
+Two CI-only defects found and fixed during the wave: `pg_dump` was given a password-masked URL
+(now `render_as_string(hide_password=False)`), and the compose start check used `docker compose wait`
+on an already-exited one-shot service (now reads `ps -a` exit codes). CI runners are pinned to
+`ubuntu-24.04` so the client major matches `postgres:16`.
+
 ## Known limitations
 
 - Sample data remains in signed-out/demo mode by design; in live mode pages read the API
