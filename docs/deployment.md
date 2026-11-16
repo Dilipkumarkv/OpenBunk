@@ -112,7 +112,8 @@ boot**, sign in once as owner, create your own owner user (`/api/v1/employees`),
   run without `--force`, take a pre-restore snapshot, and verify row counts afterward. A dump from a
   different Alembic revision is rejected unless `--allow-revision-mismatch` is passed.
 - Automated drill: `backend/tests/test_backup_restore.py` backs up, mutates, restores, and compares
-  row counts; CI runs it against PostgreSQL (requires `pg_dump`/`pg_restore` client tools).
+  row counts; CI installs `pg_dump`/`pg_restore` 16 (the client major must match the Postgres server
+  major — a newer client writes settings the older server rejects) and runs the drill against PostgreSQL.
 - Host-level drill before every production migration:
   1. `docker compose run --rm migrate python -m app.backup create /data/drill.dump`
   2. restore into a scratch database with `restore --force` and compare the printed row counts
