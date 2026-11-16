@@ -1,9 +1,11 @@
 # OpenBunk Development Status
 
 ## Current milestone
+
 Repository foundation (Phase 01) — complete. Next: UI prototype in-app (Phase 02).
 
 ## Requirements
+
 - Cloud hosted
 - PC + Android + remote owner
 - Assisted meter entry
@@ -12,6 +14,7 @@ Repository foundation (Phase 01) — complete. Next: UI prototype in-app (Phase 
 - UI prototype first
 
 ## Completed
+
 - [x] Single-file interactive HTML prototype created in conversation.
 - [x] Phase-by-phase harness instructions drafted.
 - [x] Repository foundation (2026-11-15) — see verification results below.
@@ -34,6 +37,7 @@ Vitest 5.1.0 + Testing Library + jsdom, npm 11.17.0 (packageManager pinned), Nod
 Backend/database intentionally not started (Phase 04+).
 
 **Verification (all run locally on Windows, exit codes shown):**
+
 - `npm run lint` → exit 0, no findings
 - `npm run type-check` (`tsc -b`) → exit 0
 - `npm run test` (`vitest run`) → exit 0, 1 file / 1 test passed
@@ -51,19 +55,22 @@ type-check → test → format:check → build). NOTE: not yet executed — no G
 and nothing pushed. Treat CI as configured-but-unverified until first push.
 
 **Files added:** README.md (rewritten: setup, scripts, structure, troubleshooting), LICENSE (MIT),
-.gitignore (+ .env, *.db/*.sqlite, coverage, caches), .env.example, .prettierrc.json, .prettierignore,
+.gitignore (+ .env, _.db/_.sqlite, coverage, caches), .env.example, .prettierrc.json, .prettierignore,
 .npmrc, .github/workflows/ci.yml, src/test/setup.ts, src/App.test.tsx, favicon.svg.
 Default Vite starter content replaced with a minimal placeholder app (hero/icons assets removed).
 
 **Defects / notes:**
+
 - `format:check` initially failed on 3 files; fixed with `prettier --write`, now passes.
 - GitHub Actions workflow has not run yet (no remote).
 - No license headers on source files (MIT covers via LICENSE).
 
 ## Known limitations
+
 - Prototype uses illustrative sample data.
 - No persistence, authentication, backend, cloud, or hardware integration.
 - Buttons that say demo/preview do not perform real business writes.
 
 ## Update this file after every phase
+
 Record actual commands and results, files changed, defects, and next phase.
