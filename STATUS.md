@@ -450,7 +450,7 @@ was performed; the release label remains **Prototype v0.9**.
 **Not verified in this environment:** Docker/Compose (no Docker installed locally), PostgreSQL
 backup/restore outside CI, browser/print/screen-reader passes, Android device, host-level staging.
 
-**CI (GitHub Actions, verified 2026-11-16):** run `43836193844` on commit `2537e8f` — **all three jobs
+**CI (GitHub Actions, verified 2026-11-16):** run `43836542643` on commit `ce3dfc5` — **all three jobs
 green**: lint/type-check/test/format/build; compose stack rehearsal (dedicated `migrate` service exits
 0, seed + login with the new 6-digit PIN, readiness, no secrets in logs); backend on PostgreSQL 16
 (77 tests, `alembic check`, advisory-lock migration runner, native `pg_dump`/`pg_restore` roundtrip).
