@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openbunk -d openbunk"]
+      test: ['CMD-SHELL', 'pg_isready -U openbunk -d openbunk']
       interval: 5s
       timeout: 3s
       retries: 12
@@ -26,14 +26,18 @@ services:
       DATABASE_URL: postgresql+psycopg://openbunk:${POSTGRES_PASSWORD:-openbunk-dev-only}@db:5432/openbunk
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      RATE_LIMIT_PER_MINUTE: "20"
+      RATE_LIMIT_PER_MINUTE: '20'
       # set OPENBUNK_SEED_PIN=1234 only for demo environments; never in production
       OPENBUNK_SEED_PIN: ${OPENBUNK_SEED_PIN:-}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read() else 1)\""]
+      test:
+        [
+          'CMD-SHELL',
+          'python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen(''http://127.0.0.1:8000/health'', timeout=3).read() else 1)"',
+        ]
       interval: 10s
       timeout: 3s
       retries: 6
@@ -46,7 +50,7 @@ services:
       args:
         VITE_API_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
     ports:
-      - "8080:80"
+      - '8080:80'
     depends_on:
       api:
         condition: service_healthy

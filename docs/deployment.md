@@ -5,15 +5,15 @@ Scope: one station, single host, PostgreSQL — a real but modest cloud footprin
 
 ## 1. What is ready vs what is not
 
-| Component | Status |
-| --- | --- |
-| Dockerized frontend (nginx) + API (python slim, non-root) + PostgreSQL | Written; CI builds and health-checks the stack on every push |
-| Staging steps (this document) | Documented; rehearsed in CI end-to-end |
-| HTTPS/TLS | Documented (Caddy example); NOT verified — requires a real host + domain |
-| Managed/secured self-hosted PostgreSQL | Documented; not provisioned anywhere |
-| Backup + restore drill | Executed and verified (see §6) |
-| Monitoring & log retention | Documented; not provisioned |
-| Production deployment | **Not done — needs explicit owner approval + a host + domain** |
+| Component                                                              | Status                                                                   |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Dockerized frontend (nginx) + API (python slim, non-root) + PostgreSQL | Written; CI builds and health-checks the stack on every push             |
+| Staging steps (this document)                                          | Documented; rehearsed in CI end-to-end                                   |
+| HTTPS/TLS                                                              | Documented (Caddy example); NOT verified — requires a real host + domain |
+| Managed/secured self-hosted PostgreSQL                                 | Documented; not provisioned anywhere                                     |
+| Backup + restore drill                                                 | Executed and verified (see §6)                                           |
+| Monitoring & log retention                                             | Documented; not provisioned                                              |
+| Production deployment                                                  | **Not done — needs explicit owner approval + a host + domain**           |
 
 ## 2. Target architecture (single host, minimal exposure)
 
@@ -57,6 +57,7 @@ caddy reverse-proxy --from staging.example.com --to localhost:8080   # or a Cadd
 ```
 
 Verify:
+
 ```bash
 curl -I https://staging.example.com/healthz        # 200 (web container)
 curl https://staging.example.com/api/readiness     # {"status":"ready","database":"ok"}
@@ -113,7 +114,7 @@ boot**, sign in once as owner, create your own owner user (`/api/v1/employees`),
 
 - Session tokens: revoke per employee via `DELETE /api/v1/employees/{id}` re-activation flow, or
   wipe `session_tokens` + force re-login for everyone: `docker compose exec db psql -U openbunk -c
-  'UPDATE session_tokens SET revoked_at = now()'`.
+'UPDATE session_tokens SET revoked_at = now()'`.
 - DB password: rotate in Postgres (`ALTER USER openbunk PASSWORD …`), update `.env`, recreate api/web
   containers; the password lives only in env vars.
 - PIN reset: no self-service flow yet — owner re-creates the employee or resets via a re-seed run

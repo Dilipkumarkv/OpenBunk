@@ -44,7 +44,7 @@ jobs:
     name: Compose stack rehearsal
     runs-on: ubuntu-latest
     env:
-      OPENBUNK_SEED_PIN: "1234"
+      OPENBUNK_SEED_PIN: '1234'
       POSTGRES_PASSWORD: ci-staging-only
       ENVIRONMENT: staging
     steps:
