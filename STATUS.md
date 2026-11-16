@@ -386,6 +386,10 @@ covered (`tests/test_adjustments.py`, 3 tests; 60 backend tests total).
 
 **Owner must decide next:** remain prototype · provision pilot staging · production (requires all).
 
+## Phase 09 outcome
+
+**Owner decision (2026-11-16): remain prototype.** No pilot, no production. Repo stays a CI-green prototype with explicit verification records; revisit only with a real staging host + operator UAT.
+
 ## Known limitations
 
 - Sample data remains in signed-out/demo mode by design; in live mode pages read the API

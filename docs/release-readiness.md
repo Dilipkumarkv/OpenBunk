@@ -69,4 +69,6 @@ Do not market or use for live operations. The only sensible next step after this
 3. (c) production → all of (b) **plus** security checklist cleared, pen-test-level review,
    support/SLA, monitoring, and a signed release approval from the owner.
 
-**No step above happens without your explicit go-ahead.**
+**Owner decision (2026-11-16): REMAIN PROTOTYPE.** No pilot, no production — the repository stays a
+CI-green prototype with honest verification records. Revisit only when a real staging host +
+operator UAT are planned.
