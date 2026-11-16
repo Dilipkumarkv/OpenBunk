@@ -62,15 +62,21 @@ Dependencies are pinned to exact versions in `package.json`; `package-lock.json`
 
 ```
 .github/workflows/ci.yml   # CI: lint, type-check, test, format check, build
-public/                    # static assets served as-is
+public/                    # static assets (favicon)
 src/
+  components/              # Layout (sidebar/topbar shell), Toast provider + context
+  data/sampleData.ts       # illustrative demo data — no real backend
+  lib/                     # format helpers + shiftCalc (meter difference math, unit-tested)
+  pages/                   # Dashboard, Shifts, Fuel, Credit, Reports, Settings
   test/setup.ts            # Vitest setup (jest-dom matchers)
-  App.tsx                  # placeholder — features arrive in later phases
-  App.test.tsx             # smoke test
+  App.tsx                  # routes (HashRouter)
   main.tsx                 # entry point
 .env.example               # documented env vars; copy to .env (never commit .env)
 STATUS.md                  # phase tracking — updated after every phase
 ```
+
+Routing uses `HashRouter` so the static build works on any file host (e.g. GitHub Pages)
+without SPA rewrite rules; switch to `BrowserRouter` if/when a rewrite-capable server exists.
 
 ## CI
 

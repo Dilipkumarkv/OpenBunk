@@ -1,10 +1,31 @@
-function App() {
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import Layout from './components/Layout'
+import { ToastProvider } from './components/Toast'
+import Credit from './pages/Credit'
+import Dashboard from './pages/Dashboard'
+import Fuel from './pages/Fuel'
+import Reports from './pages/Reports'
+import Settings from './pages/Settings'
+import Shifts from './pages/Shifts'
+
+// HashRouter so the static build works on any file host / GitHub Pages
+// without server-side SPA rewrite rules. Revisit if a server is added later.
+export default function App() {
   return (
-    <main className="app">
-      <h1>OpenBunk</h1>
-      <p>Repository foundation is in place. Application features land in later phases.</p>
-    </main>
+    <HashRouter>
+      <ToastProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/shifts" element={<Shifts />} />
+            <Route path="/fuel" element={<Fuel />} />
+            <Route path="/credit" element={<Credit />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </ToastProvider>
+    </HashRouter>
   )
 }
-
-export default App

@@ -3,8 +3,14 @@ import { describe, expect, it } from 'vitest'
 import App from './App'
 
 describe('App', () => {
-  it('renders the OpenBunk heading', () => {
+  it('renders the dashboard route with navigation', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'OpenBunk' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      /Good (morning|afternoon|evening), Deep/,
+    )
+    expect(screen.getByRole('link', { name: /Shift & readings/i })).toHaveAttribute(
+      'href',
+      '#/shifts',
+    )
   })
 })
