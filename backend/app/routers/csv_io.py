@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import audit, get_db_dep, require_roles
+from ..deps import audit, get_db_dep, require_reauth, require_roles
 from ..domain import round2
 from ..errors import ApiError
 from ..models import CreditCustomer, CreditLedgerEntry, Employee, MeterReading, Payment, Sale, Shift
@@ -24,12 +24,21 @@ router = APIRouter(tags=["csv"])
 MAX_IMPORT_BYTES = 1_000_000  # 1 MB
 MAX_IMPORT_ROWS = 500
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_cell(value):
+    """Prevent spreadsheet formula injection from customer-entered text."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
 
 def _csv_response(filename: str, rows: list[list]) -> Response:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     for row in rows:
-        writer.writerow(row)
+        writer.writerow([_safe_cell(cell) for cell in row])
     return Response(
         content=buffer.getvalue(),
         media_type="text/csv; charset=utf-8",
@@ -41,6 +50,7 @@ def _csv_response(filename: str, rows: list[list]) -> Response:
 def export_csv(
     type: str = Query(pattern="^(sales|collections|credit-ledger|shifts)$"),
     employee: Employee = Depends(require_roles("owner", "accountant", "auditor", "manager")),
+    _: Employee = Depends(require_reauth),
     db: Session = Depends(get_db_dep),
 ):
     sid = employee.station_id
@@ -57,7 +67,7 @@ def export_csv(
         rows = [["date", "mode", "amount"]]
         grouped = (
             db.query(func.date(Payment.created_at), Payment.mode, func.sum(Payment.amount))
-            .filter(Payment.station_id == sid)
+            .filter(Payment.station_id == sid, Payment.mode != "credit")
             .group_by(func.date(Payment.created_at), Payment.mode)
             .order_by(func.date(Payment.created_at))
             .all()

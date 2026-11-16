@@ -1,15 +1,26 @@
 from datetime import date
-from uuid import UUID
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, status
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from ..deps import audit, get_current_employee, get_db_dep, paginate, require_reauth, require_roles
 from ..domain import compute_volume, reconcile, round2
 from ..errors import ApiError
-from ..idempotency import replay_if_present, store
-from ..models import Employee, FuelProduct, MeterReading, Nozzle, Shift, StockMovement, utcnow
+from ..idempotency import fingerprint, lookup, store
+from ..models import (
+    Employee,
+    FuelProduct,
+    MeterReading,
+    Nozzle,
+    Sale,
+    Shift,
+    StockMovement,
+    utcnow,
+)
+from ..pricing import require_price, resolve_nozzle
 from ..schemas import (
     MeterReadingOut,
     ReadingsUpsert,
@@ -18,14 +29,16 @@ from ..schemas import (
     ShiftOpen,
     ShiftOut,
     ShiftPage,
+    ShiftValidate,
     ValidationIssue,
     ValidationOut,
 )
-from sqlalchemy import asc, desc
 
 router = APIRouter(tags=["shifts"])
 
 _SORTABLE = {"business_date": Shift.business_date, "kind": Shift.kind, "status": Shift.status}
+TOLERANCE = Decimal("1.00")
+APPROVER_ROLES = ("owner", "manager", "accountant")
 
 
 @router.post("/shifts", response_model=ShiftOut, status_code=status.HTTP_201_CREATED)
@@ -34,8 +47,10 @@ def open_shift(payload: ShiftOpen, employee: Employee = Depends(require_roles("o
     operator = employee
     if payload.employee_id is not None and payload.employee_id != employee.id:
         candidate = db.get(Employee, payload.employee_id)
-        if candidate is None or candidate.station_id != employee.station_id:
+        if candidate is None or candidate.station_id != employee.station_id or not candidate.active:
             raise ApiError(404, "Employee not found")
+        if candidate.role not in ("owner", "manager", "cashier"):
+            raise ApiError(422, "Selected employee cannot operate a shift")
         operator = candidate
 
     shift = Shift(
@@ -109,33 +124,40 @@ def upsert_readings(shift_id: UUID, payload: ReadingsUpsert, employee: Employee 
             "Shift was modified by another session — refresh before saving",
             details={"current_version": shift.version, "expected_version": payload.expected_version},
         )
+    if not payload.readings:
+        raise ApiError(422, "At least one reading is required")
 
-    nozzle_ids = {r.nozzle_id for r in payload.readings}
-    nozzles = {n.id: n for n in db.query(Nozzle).filter(Nozzle.station_id == employee.station_id, Nozzle.id.in_(nozzle_ids)).all()}
-    missing = nozzle_ids - set(nozzles)
-    if missing:
-        raise ApiError(422, "Unknown nozzle(s)", details=[{"nozzle_id": str(m)} for m in missing])
+    nozzle_ids = [r.nozzle_id for r in payload.readings]
+    if len(set(nozzle_ids)) != len(nozzle_ids):
+        raise ApiError(422, "Duplicate nozzle in readings")
+
+    resolved = {}
+    for reading in payload.readings:
+        nozzle, product, _tank = resolve_nozzle(db, employee.station_id, reading.nozzle_id)
+        resolved[reading.nozzle_id] = (nozzle, product)
 
     for reading in payload.readings:
+        nozzle, product = resolved[reading.nozzle_id]
+        server_price = require_price(db, employee.station_id, product.id)
         existing = (
             db.query(MeterReading)
-            .filter(MeterReading.shift_id == shift.id, MeterReading.nozzle_id == reading.nozzle_id)
+            .filter(MeterReading.shift_id == shift.id, MeterReading.nozzle_id == nozzle.id)
             .first()
         )
         if existing is not None:
             existing.opening_litres = reading.opening_litres
             existing.closing_litres = reading.closing_litres
-            existing.unit_price = reading.unit_price
+            existing.unit_price = server_price
             existing.recorded_by = employee.id
         else:
             db.add(
                 MeterReading(
                     station_id=employee.station_id,
                     shift_id=shift.id,
-                    nozzle_id=reading.nozzle_id,
+                    nozzle_id=nozzle.id,
                     opening_litres=reading.opening_litres,
                     closing_litres=reading.closing_litres,
-                    unit_price=reading.unit_price,
+                    unit_price=server_price,
                     recorded_by=employee.id,
                 )
             )
@@ -161,15 +183,33 @@ def _product_code(db: Session, nozzle: Nozzle) -> str:
 
 def _validate_readings(db: Session, shift: Shift, rollover) -> tuple[bool, list[ValidationIssue]]:
     issues: list[ValidationIssue] = []
-    nozzles = {n.id: n for n in db.query(Nozzle).filter(Nozzle.station_id == shift.station_id).all()}
+    nozzles = {
+        n.id: n
+        for n in db.query(Nozzle).filter(
+            Nozzle.station_id == shift.station_id, Nozzle.active.is_(True)
+        ).all()
+    }
     readings = db.query(MeterReading).filter(MeterReading.shift_id == shift.id).all()
     if not readings:
         issues.append(ValidationIssue(field="readings", message="No readings recorded for this shift."))
         return False, issues
 
+    recorded = {r.nozzle_id for r in readings}
+    for nozzle in nozzles.values():
+        if nozzle.id not in recorded:
+            issues.append(
+                ValidationIssue(
+                    field=f"nozzle {nozzle.label}",
+                    message=f"No reading recorded for active nozzle {nozzle.label}.",
+                )
+            )
+
     for reading in readings:
         nozzle = nozzles.get(reading.nozzle_id)
-        code = _product_code(db, nozzle) if nozzle else ""
+        if nozzle is None:
+            issues.append(ValidationIssue(field="readings", message="Reading references an inactive or unknown nozzle."))
+            continue
+        code = _product_code(db, nozzle)
         rollover_value = None
         authorized = False
         if code == "petrol" and rollover.petrol:
@@ -181,27 +221,73 @@ def _validate_readings(db: Session, shift: Shift, rollover) -> tuple[bool, list[
             if authorized:
                 if rollover_value is None or rollover_value <= reading.opening_litres:
                     issues.append(ValidationIssue(
-                        field=f"nozzle {nozzle.label if nozzle else reading.nozzle_id}",
+                        field=f"nozzle {nozzle.label}",
                         message="Authorized rollover needs a rollover value greater than the opening reading.",
                     ))
             else:
                 issues.append(ValidationIssue(
-                    field=f"nozzle {nozzle.label if nozzle else reading.nozzle_id}",
+                    field=f"nozzle {nozzle.label}",
                     message="Closing is below opening — check the meter readings (or authorize a rollover).",
                 ))
         if reading.unit_price <= 0:
             issues.append(ValidationIssue(
-                field=f"nozzle {nozzle.label if nozzle else reading.nozzle_id} price",
-                message="Price must be greater than zero.",
+                field=f"nozzle {nozzle.label} price",
+                message="The configured selling price must be greater than zero.",
             ))
     return len(issues) == 0, issues
 
 
 @router.post("/shifts/{shift_id}/validate", response_model=ValidationOut)
-def validate_shift(shift_id: UUID, payload: ShiftClose, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+def validate_shift(shift_id: UUID, payload: ShiftValidate, employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
     shift = _get_shift(db, shift_id, employee.station_id)
     valid, issues = _validate_readings(db, shift, payload.rollover)
     return ValidationOut(valid=valid, issues=issues)
+
+
+def _verify_approver(
+    db: Session,
+    actor: Employee,
+    code: str | None,
+    pin: str | None,
+    *,
+    action: str,
+    shift_id: UUID,
+) -> Employee:
+    from ..security import verify_pin
+
+    if not code or not pin:
+        raise ApiError(
+            422,
+            "A second approver is required for a variance over ₹1.00 "
+            "(X-Approval-Code and X-Approval-Pin)",
+            details={"approval_required": True},
+        )
+    approver = (
+        db.query(Employee)
+        .filter(
+            Employee.station_id == actor.station_id,
+            Employee.code == code,
+            Employee.active.is_(True),
+        )
+        .first()
+    )
+    if (
+        approver is None
+        or approver.id == actor.id
+        or approver.role not in APPROVER_ROLES
+        or not verify_pin(pin, approver.pin_hash)
+    ):
+        raise ApiError(403, "Second approver rejected — check code, role and PIN")
+    audit(
+        db,
+        station_id=actor.station_id,
+        action="shift.variance_approved",
+        entity_type="shift",
+        entity_id=shift_id,
+        payload={"approver_code": approver.code, "approver_role": approver.role},
+        actor=approver.id,
+    )
+    return approver
 
 
 @router.post("/shifts/{shift_id}/close", status_code=status.HTTP_200_OK)
@@ -209,14 +295,14 @@ def close_shift(
     shift_id: UUID,
     payload: ShiftClose,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    x_approval_code: str | None = Header(default=None, alias="X-Approval-Code"),
+    x_approval_pin: str | None = Header(default=None, alias="X-Approval-Pin"),
     employee: Employee = Depends(require_roles("owner", "manager")),
     _: Employee = Depends(require_reauth),
     db: Session = Depends(get_db_dep),
 ):
-    if not idempotency_key:
-        raise ApiError(400, "Idempotency-Key header is required for shift close")
-
-    replayed, stored = replay_if_present(db, employee.station_id, "shifts.close", idempotency_key)
+    request_hash = fingerprint({"shift_id": str(shift_id), "body": payload.model_dump(mode="json")})
+    replayed, stored = lookup(db, employee.station_id, "shifts.close", idempotency_key, request_hash)
     if replayed:
         status_code, body = stored
         body = dict(body)
@@ -246,17 +332,20 @@ def close_shift(
 
         total_revenue = Decimal("0")
         total_litres = Decimal("0")
+        rollover_values: dict[str, str] = {}
         for reading in readings:
             nozzle = nozzles[reading.nozzle_id]
             product = db.get(FuelProduct, nozzle.product_id)
             code = (product.code if product else "").lower()
-            rollover_value = (
-                payload.rollover.petrol_rollover_value
-                if code == "petrol" and payload.rollover.petrol
-                else payload.rollover.diesel_rollover_value
-                if code == "diesel" and payload.rollover.diesel
-                else None
-            )
+            rollover_value = None
+            if code == "petrol" and payload.rollover.petrol:
+                rollover_value = payload.rollover.petrol_rollover_value
+                if rollover_value is not None:
+                    rollover_values["petrol"] = str(rollover_value)
+            elif code == "diesel" and payload.rollover.diesel:
+                rollover_value = payload.rollover.diesel_rollover_value
+                if rollover_value is not None:
+                    rollover_values["diesel"] = str(rollover_value)
             volume = compute_volume(reading.opening_litres, reading.closing_litres, rollover_value)
             value = round2(volume * reading.unit_price)
             total_revenue += value
@@ -274,34 +363,44 @@ def close_shift(
                     )
                 )
 
-        # reconciliation policy: if collections are supplied, variance must be resolved or
-        # explicitly authorized with override_reason — never silently accepted
-        if payload.collections:
-            recon = reconcile(total_revenue, list(payload.collections.values()))
-            variance = Decimal(recon["variance"])
-            override = (payload.override_reason or "").strip()
-            if abs(variance) > Decimal("1.00") and not override:
+        # Credit sales are not cash collected: exclude them from the expected drawer.
+        credit_sales = (
+            db.query(func.coalesce(func.sum(Sale.amount), Decimal("0")))
+            .filter(Sale.station_id == employee.station_id, Sale.shift_id == shift.id, Sale.tender == "credit")
+            .scalar()
+        )
+        expected_collected = round2(total_revenue - Decimal(credit_sales or 0))
+
+        recon = reconcile(expected_collected, list(payload.collections.values()), tolerance=TOLERANCE)
+        variance = Decimal(recon["variance"])
+        override = (payload.override_reason or "").strip()
+        if abs(variance) > TOLERANCE:
+            if not override:
                 raise ApiError(
                     422,
-                    "Collections do not reconcile with expected sales — resolve or provide override_reason",
-                    details={**recon, "override_required": True},
+                    "Collections do not reconcile with expected collections — resolve or provide override_reason",
+                    details={**recon, "credit_excluded": str(round2(Decimal(credit_sales or 0))), "override_required": True},
                 )
-            if override:
-                audit(
-                    db,
-                    station_id=employee.station_id,
-                    action="shift.close_variance_override",
-                    entity_type="shift",
-                    entity_id=shift.id,
-                    reason=override,
-                    payload=recon,
-                    actor=employee.id,
-                )
+            _verify_approver(db, employee, x_approval_code, x_approval_pin, action="shift.close_variance_override", shift_id=shift.id)
+            audit(
+                db,
+                station_id=employee.station_id,
+                action="shift.close_variance_override",
+                entity_type="shift",
+                entity_id=shift.id,
+                reason=override,
+                payload=recon,
+                actor=employee.id,
+            )
 
         shift.status = "closed"
         shift.closed_at = utcnow()
         shift.closed_by = employee.id
         shift.revenue_total = round2(total_revenue)
+        shift.collections = {key: str(round2(value)) for key, value in payload.collections.items()}
+        shift.variance_amount = variance
+        shift.variance_reason = override or None
+        shift.rollover_values = rollover_values or None
         shift.version += 1
         audit(
             db,
@@ -309,7 +408,14 @@ def close_shift(
             action="shift.closed",
             entity_type="shift",
             entity_id=shift.id,
-            payload={"revenue_total": str(shift.revenue_total), "litres": str(total_litres), "nozzle_count": len(readings)},
+            payload={
+                "revenue_total": str(shift.revenue_total),
+                "litres": str(total_litres),
+                "nozzle_count": len(readings),
+                "collections": shift.collections,
+                "variance": str(variance),
+                "credit_sales_excluded": str(round2(Decimal(credit_sales or 0))),
+            },
             actor=employee.id,
         )
         body = {
@@ -318,8 +424,11 @@ def close_shift(
             "revenue_total": str(shift.revenue_total),
             "total_litres": str(total_litres),
             "readings_processed": len(readings),
+            "collections": shift.collections,
+            "variance": str(variance),
+            "reconciliation_status": recon["status"],
         }
-        store(db, employee.station_id, "shifts.close", idempotency_key, 200, body)
+        store(db, employee.station_id, "shifts.close", idempotency_key, 200, body, request_hash)
         db.commit()
         return body
     except ApiError:

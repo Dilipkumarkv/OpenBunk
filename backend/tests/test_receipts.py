@@ -14,7 +14,7 @@ def test_fuel_receipt_increases_book_stock(client, manager_token):
 
     response = client.post(
         "/api/v1/fuel-receipts",
-        headers=auth(manager_token),
+        headers={**auth(manager_token), "Idempotency-Key": "receipt-stock"},
         json={
             "tank_id": t01["id"],
             "product_id": products["petrol"]["id"],
@@ -33,7 +33,7 @@ def test_fuel_receipt_rejects_tank_product_mismatch(client, manager_token):
     tanks, products = _fuel_setup(client, manager_token)
     response = client.post(
         "/api/v1/fuel-receipts",
-        headers=auth(manager_token),
+        headers={**auth(manager_token), "Idempotency-Key": "receipt-mismatch"},
         json={
             "tank_id": tanks["T-02"]["id"],
             "product_id": products["petrol"]["id"],
@@ -47,7 +47,7 @@ def test_fuel_receipt_quantity_must_be_positive(client, manager_token):
     tanks, products = _fuel_setup(client, manager_token)
     response = client.post(
         "/api/v1/fuel-receipts",
-        headers=auth(manager_token),
+        headers={**auth(manager_token), "Idempotency-Key": "receipt-zero"},
         json={
             "tank_id": tanks["T-01"]["id"],
             "product_id": products["petrol"]["id"],

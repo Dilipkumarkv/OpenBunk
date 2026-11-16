@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { clearShiftDraft, loadShiftDraft, saveShiftDraft, DRAFT_STORAGE_KEY } from './draft'
 
 const SAMPLE = {
-  inputs: { petrolOpening: '1', petrolClosing: '2' },
-  rollover: { petrol: false, diesel: true, petrolValue: '100000', dieselValue: '50000' },
+  inputs: { 'nozzle-p1': { opening: '1', closing: '2' } },
+  collections: { cash: '10', upi: '0' },
+  rollover: { petrol: { authorized: false, value: '100000' } },
+  shiftKind: 'afternoon',
   savedAt: '2026-11-16T10:00:00.000Z',
 }
 
@@ -28,6 +30,16 @@ describe('shift draft persistence', () => {
     expect(loadShiftDraft(storage)).toEqual(SAMPLE)
   })
 
+  it('scopes drafts per station/employee/date/shift kind', () => {
+    const storage = memoryStorage()
+    saveShiftDraft(storage, SAMPLE, 'OB-001:EMP-00:2026-11-16:afternoon')
+
+    expect(loadShiftDraft(storage, 'OB-001:EMP-00:2026-11-16:afternoon')).toEqual(SAMPLE)
+    expect(loadShiftDraft(storage, 'OB-001:EMP-01:2026-11-16:afternoon')).toBeNull()
+    expect(loadShiftDraft(storage, 'OB-001:EMP-00:2026-11-16:night')).toBeNull()
+    expect(loadShiftDraft(storage)).toBeNull()
+  })
+
   it('returns null for missing or corrupt data', () => {
     const storage = memoryStorage()
     expect(loadShiftDraft(storage)).toBeNull()
@@ -37,12 +49,20 @@ describe('shift draft persistence', () => {
     expect(loadShiftDraft(storage)).toBeNull()
     storage.setItem(DRAFT_STORAGE_KEY, '{"inputs":{}}') // missing rollover/savedAt
     expect(loadShiftDraft(storage)).toBeNull()
+    storage.setItem(
+      DRAFT_STORAGE_KEY,
+      '{"inputs":{},"rollover":{},"collections":"nope","savedAt":"2026-01-01"}',
+    )
+    expect(loadShiftDraft(storage)).toBeNull()
   })
 
-  it('clears the draft', () => {
+  it('clears the scoped draft only', () => {
     const storage = memoryStorage()
-    saveShiftDraft(storage, SAMPLE)
-    clearShiftDraft(storage)
-    expect(loadShiftDraft(storage)).toBeNull()
+    saveShiftDraft(storage, SAMPLE, 'scope-a')
+    saveShiftDraft(storage, SAMPLE, 'scope-b')
+
+    clearShiftDraft(storage, 'scope-a')
+    expect(loadShiftDraft(storage, 'scope-a')).toBeNull()
+    expect(loadShiftDraft(storage, 'scope-b')).toEqual(SAMPLE)
   })
 })

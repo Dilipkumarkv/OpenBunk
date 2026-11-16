@@ -14,7 +14,7 @@ class ORMModel(BaseModel):
 class SessionRequest(BaseModel):
     station_code: str = Field(min_length=1, max_length=32)
     employee_code: str = Field(min_length=1, max_length=32)
-    pin: str = Field(min_length=4, max_length=64)
+    pin: str = Field(min_length=6, max_length=64)
 
 
 class SessionTokensOut(BaseModel):
@@ -53,7 +53,14 @@ class EmployeeCreate(BaseModel):
     code: str = Field(min_length=1, max_length=32)
     name: str = Field(min_length=1, max_length=200)
     role: Literal["owner", "manager", "cashier", "accountant", "auditor"]
-    pin: str = Field(min_length=4, max_length=64)
+    pin: str = Field(min_length=6, max_length=64)
+
+    @field_validator("pin")
+    @classmethod
+    def pin_is_digits(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("PIN must contain digits only")
+        return value
 
 
 class EmployeeRoleUpdate(BaseModel):
@@ -121,6 +128,7 @@ class NozzleOut(ORMModel):
     label: str
     tank_id: UUID
     product_id: UUID
+    active: bool
 
 
 class NozzleCreate(BaseModel):
@@ -149,11 +157,14 @@ class MeterReadingIn(BaseModel):
     nozzle_id: UUID
     opening_litres: Decimal = Field(ge=0)
     closing_litres: Decimal = Field(ge=0)
-    unit_price: Decimal = Field(ge=0)
+    # Deprecated client hint. The server always stores the configured price.
+    unit_price: Decimal | None = Field(default=None, ge=0)
 
     @field_validator("opening_litres", "closing_litres", "unit_price", mode="before")
     @classmethod
     def coerce_number(cls, v):
+        if v is None:
+            return None
         try:
             return Decimal(str(v))
         except (InvalidOperation, ValueError, TypeError) as e:
@@ -184,6 +195,9 @@ class ShiftOut(ORMModel):
     opened_at: datetime
     closed_at: datetime | None
     revenue_total: Decimal | None
+    collections: dict | None = None
+    variance_amount: Decimal | None = None
+    variance_reason: str | None = None
     version: int
 
 
@@ -198,12 +212,30 @@ class RolloverAuthorization(BaseModel):
     diesel_rollover_value: Decimal | None = Field(default=None, ge=0)
 
 
+class ShiftValidate(BaseModel):
+    rollover: RolloverAuthorization = RolloverAuthorization()
+
+
 class ShiftClose(BaseModel):
     rollover: RolloverAuthorization = RolloverAuthorization()
-    # optional: collections by tender; when provided, close enforces reconciliation policy
-    collections: dict[str, Decimal] | None = None
-    # required to close when collections are provided and |variance| > tolerance (authorized override)
-    override_reason: str | None = Field(default=None, max_length=300)
+    # Mandatory: every close must state what was actually collected. Credit is
+    # excluded (it is not cash collected) and must never be supplied here.
+    collections: dict[str, Decimal]
+    # Required when |variance| > tolerance; a second approver is also required.
+    override_reason: str | None = Field(default=None, min_length=5, max_length=300)
+
+    @field_validator("collections")
+    @classmethod
+    def check_collections(cls, value: dict[str, Decimal]) -> dict[str, Decimal]:
+        allowed = {"cash", "upi", "card", "other"}
+        if not value:
+            raise ValueError("collections must include at least one tender")
+        if set(value) - allowed:
+            raise ValueError(f"collections may only contain {sorted(allowed)} (credit is not collected)")
+        for tender, amount in value.items():
+            if amount < 0:
+                raise ValueError(f"collected amount for {tender} must be >= 0")
+        return value
 
 
 class ValidationIssue(BaseModel):
@@ -247,6 +279,8 @@ class CreditEntryCreate(BaseModel):
     # charge/receipt: positive. adjustment: signed (positive adds to balance, negative subtracts).
     amount: Decimal
     reason: str | None = Field(default=None, max_length=300)
+    # Owner-only, audited exception when a charge would exceed the customer's hard limit.
+    override_limit_reason: str | None = Field(default=None, min_length=10, max_length=300)
 
     @model_validator(mode="after")
     def check_amount(self):
@@ -288,6 +322,21 @@ class FuelReceiptOut(ORMModel):
     supplier: str | None
     invoice_no: str | None
     received_at: datetime
+
+
+# ---------- Fuel prices ----------
+class FuelPriceCreate(BaseModel):
+    product_id: UUID
+    unit_price: Decimal = Field(gt=0)
+    effective_from: datetime | None = None
+
+
+class FuelPriceOut(BaseModel):
+    product_id: UUID
+    product_code: str
+    product_name: str
+    unit_price: Decimal
+    effective_from: datetime
 
 
 # ---------- Reports ----------

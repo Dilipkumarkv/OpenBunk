@@ -80,6 +80,24 @@ class FuelProduct(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
+class FuelPrice(Base):
+    """Server-authoritative selling price. Sales and readings never use a client price."""
+
+    __tablename__ = "fuel_prices"
+    __table_args__ = (
+        Index("ix_fuel_prices_station_product_effective", "station_id", "product_id", "effective_from"),
+        CheckConstraint("unit_price > 0", name="ck_fuel_price_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    station_id: Mapped[UUID] = mapped_column(ForeignKey("stations.id"), nullable=False, index=True)
+    product_id: Mapped[UUID] = mapped_column(ForeignKey("fuel_products.id"), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("employees.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class Tank(Base):
     __tablename__ = "tanks"
     __table_args__ = (
@@ -128,6 +146,10 @@ class Shift(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_by: Mapped[UUID | None] = mapped_column(ForeignKey("employees.id"))
     revenue_total: Mapped[Decimal | None] = mapped_column(MONEY)
+    collections: Mapped[dict | None] = mapped_column(JSON)
+    variance_amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    variance_reason: Mapped[str | None] = mapped_column(String(300))
+    rollover_values: Mapped[dict | None] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     readings: Mapped[list["MeterReading"]] = relationship(back_populates="shift")
@@ -307,6 +329,21 @@ class IdempotencyKey(Base):
     station_id: Mapped[UUID] = mapped_column(ForeignKey("stations.id"), nullable=False)
     endpoint: Mapped[str] = mapped_column(String(64), nullable=False)
     key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str | None] = mapped_column(String(64))
     response_status: Mapped[int] = mapped_column(Integer, nullable=False)
     response_body: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ReauthAttempt(Base):
+    """Consecutive failed re-authentication attempts, keyed by employee."""
+
+    __tablename__ = "reauth_attempts"
+    __table_args__ = (UniqueConstraint("employee_id", name="uq_reauth_attempt_employee"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    station_id: Mapped[UUID] = mapped_column(ForeignKey("stations.id"), nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"), nullable=False)
+    failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

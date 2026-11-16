@@ -18,6 +18,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s \
   CMD python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read() else 1)"
 
-# Migrations run on container start: backup must already exist for production upgrades
-# (see docs/deployment.md). For schema changes, run `alembic upgrade head` explicitly.
-CMD ["sh", "-c", "python -m alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Migrations are a separate one-shot `migrate` service (python -m app.migrate) that
+# runs under a Postgres advisory lock before this container starts. Never migrate
+# on API boot: replicas would race and a failed upgrade would leave a half-started API.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

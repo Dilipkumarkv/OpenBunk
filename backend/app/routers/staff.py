@@ -12,6 +12,17 @@ from ..security import hash_pin
 router = APIRouter(tags=["staff"])
 
 
+def _active_owners(db: Session, station_id, exclude_id=None) -> int:
+    query = db.query(Employee).filter(
+        Employee.station_id == station_id,
+        Employee.role == "owner",
+        Employee.active.is_(True),
+    )
+    if exclude_id is not None:
+        query = query.filter(Employee.id != exclude_id)
+    return query.count()
+
+
 @router.get("/employees", response_model=list[EmployeeOut])
 def list_employees(
     employee: Employee = Depends(require_roles("owner")),
@@ -29,6 +40,7 @@ def list_employees(
 def create_employee(
     payload: EmployeeCreate,
     employee: Employee = Depends(require_roles("owner")),
+    _: Employee = Depends(require_reauth),
     db: Session = Depends(get_db_dep),
 ):
     existing = db.query(Employee).filter(
@@ -61,6 +73,8 @@ def update_role(
     target = db.get(Employee, employee_id)
     if target is None or target.station_id != employee.station_id:
         raise ApiError(404, "Employee not found")
+    if target.role == "owner" and payload.role != "owner" and _active_owners(db, employee.station_id, exclude_id=target.id) == 0:
+        raise ApiError(409, "Cannot remove the last active owner — assign another owner first")
     old_role = target.role
     target.role = payload.role
     audit(
@@ -90,6 +104,8 @@ def offboard(
         raise ApiError(404, "Employee not found")
     if target.id == employee.id:
         raise ApiError(400, "Owner cannot offboard themselves")
+    if target.role == "owner" and _active_owners(db, employee.station_id, exclude_id=target.id) == 0:
+        raise ApiError(409, "Cannot offboard the last active owner — assign another owner first")
     target.active = False
     # kill existing sessions immediately
     from ..models import SessionToken, utcnow

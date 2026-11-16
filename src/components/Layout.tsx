@@ -73,11 +73,17 @@ export default function Layout() {
         <div className="sidebottom">
           {session ? (
             <>
-              <strong>Connected</strong>
+              <strong>{online ? 'Connected' : 'Signed in · API unreachable'}</strong>
               {session.employee.name} · {session.employee.code} ({session.employee.role})
               <br />
               Station {session.station.code}
               <br />
+              {!online && (
+                <>
+                  Live saves are unavailable until the backend is reachable.
+                  <br />
+                </>
+              )}
               <button className="btn sidebutton" onClick={() => void logout()}>
                 Sign out
               </button>
@@ -101,8 +107,14 @@ export default function Layout() {
             <b>{crumb}</b>
           </div>
           <div className="topright">
-            <span className={session ? 'live' : 'live offline'}>
-              {session ? '● Connected' : online ? '● API online' : '● Offline demo'}
+            <span className={session && online ? 'live' : 'live offline'}>
+              {session
+                ? online
+                  ? '● Connected'
+                  : '● Signed in · API unreachable'
+                : online
+                  ? '● API online'
+                  : '● Offline demo'}
             </span>
             <div className="avatar">{initials}</div>
           </div>

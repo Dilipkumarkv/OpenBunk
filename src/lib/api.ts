@@ -26,10 +26,12 @@ export class ApiAuthError extends Error {
 }
 export class ApiHttpError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  details: unknown
+  constructor(status: number, message: string, details?: unknown) {
     super(message)
     this.name = 'ApiHttpError'
     this.status = status
+    this.details = details
   }
 }
 
@@ -41,8 +43,8 @@ export interface TokenPair {
 }
 
 export interface SessionInfo {
-  employee: { code: string; name: string; role: string }
-  station: { code: string; name: string }
+  employee: { id: string; code: string; name: string; role: string }
+  station: { id: string; code: string; name: string }
 }
 
 export function loadTokens(): TokenPair | null {
@@ -125,15 +127,39 @@ async function ensureAccessToken(): Promise<string | null> {
   return pair?.access_token ?? null
 }
 
-export async function request(path: string, init: RequestInit = {}): Promise<Response> {
+async function httpError(res: Response, fallback: string): Promise<ApiHttpError> {
+  let message = fallback
+  let details: unknown
+  try {
+    const body = (await res.json()) as { error?: { message?: string; details?: unknown } }
+    message = body.error?.message || fallback
+    details = body.error?.details
+  } catch {
+    /* non-JSON error body */
+  }
+  return new ApiHttpError(res.status, message, details)
+}
+
+interface RequestOptions {
+  /** Re-auth requests must not trigger a token refresh: a 401 means wrong PIN. */
+  retryAuth?: boolean
+}
+
+export async function request(
+  path: string,
+  init: RequestInit = {},
+  options: RequestOptions = {},
+): Promise<Response> {
+  const retryAuth = options.retryAuth !== false
   let token = await ensureAccessToken()
   let res = await rawFetch(path, init, token ?? undefined)
-  if (res.status === 401 && token) {
-    clearTokens()
-    token = await ensureAccessToken() // forced refresh attempt
-    if (token) {
-      res = await rawFetch(path, init, token)
+  if (res.status === 401 && token && retryAuth) {
+    // Refresh first. The refresh token is still valid even when the access token is not.
+    const pair = await refreshTokens()
+    if (pair) {
+      res = await rawFetch(path, init, pair.access_token)
     } else {
+      clearTokens()
       throw new ApiAuthError()
     }
   }
@@ -142,19 +168,13 @@ export async function request(path: string, init: RequestInit = {}): Promise<Res
 
 export async function getJson<T>(path: string): Promise<T> {
   const res = await request(path)
-  if (!res.ok) throw new ApiHttpError(res.status, `GET ${path} failed with ${res.status}`)
+  if (!res.ok) throw await httpError(res, `GET ${path} failed with ${res.status}`)
   return (await res.json()) as T
 }
 
 export async function putJson<T>(path: string, body: unknown): Promise<T> {
   const res = await request(path, { method: 'PUT', body: JSON.stringify(body) })
-  if (!res.ok) {
-    const detail = await res.text()
-    throw new ApiHttpError(
-      res.status,
-      detail.slice(0, 300) || `PUT ${path} failed with ${res.status}`,
-    )
-  }
+  if (!res.ok) throw await httpError(res, `PUT ${path} failed with ${res.status}`)
   return (await res.json()) as T
 }
 
@@ -163,18 +183,19 @@ export async function postJson<T>(
   body: unknown,
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
-  const res = await request(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { ...extraHeaders },
-  })
-  if (!res.ok) {
-    const detail = await res.text()
-    throw new ApiHttpError(
-      res.status,
-      detail.slice(0, 300) || `POST ${path} failed with ${res.status}`,
-    )
-  }
+  const isReauth = Object.keys(extraHeaders ?? {}).some(
+    (key) => key.toLowerCase() === 'x-reauth-pin',
+  )
+  const res = await request(
+    path,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { ...extraHeaders },
+    },
+    { retryAuth: !isReauth },
+  )
+  if (!res.ok) throw await httpError(res, `POST ${path} failed with ${res.status}`)
   return (await res.json()) as T
 }
 
@@ -220,8 +241,15 @@ export async function logout(): Promise<void> {
 
 export async function healthCheck(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) })
-    return res.ok
+    // Readiness (database + API), not the SPA fallback or a static /health page.
+    const res = await fetch(`${BASE}/api/v1/readiness`, {
+      signal: AbortSignal.timeout(3000),
+      headers: { Accept: 'application/json' },
+    })
+    if (!res.ok) return false
+    if (!(res.headers.get('content-type') ?? '').includes('application/json')) return false
+    const body = (await res.json()) as { status?: string; database?: string }
+    return body.status === 'ready' && body.database === 'ok'
   } catch {
     return false
   }

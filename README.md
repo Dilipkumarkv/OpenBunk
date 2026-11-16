@@ -61,10 +61,14 @@ Dependencies are pinned to exact versions in `package.json`; `package-lock.json`
 ## Quick start (Docker stack)
 
 ```bash
-docker compose up -d --wait          # db + api + web; waits for healthchecks
+docker compose up -d                   # db → one-shot migrate → api → web
+docker compose wait migrate            # exits non-zero if migrations failed
 docker compose exec api python -m app.seed   # demo station OB-001 (skip in production)
-# open http://localhost:8080  → sign in with EMP-00 / 1234 (dev only)
+# open http://localhost:8080  → sign in with EMP-00 / the PIN in OPENBUNK_SEED_PIN (dev only)
 ```
+
+`OPENBUNK_SEED_PIN` is now empty by default — set a 6+ digit value (e.g. `246813`) before running
+the seed, or no demo employees are created. The web container binds `127.0.0.1:8080` only.
 
 ## Backend (Phase 04)
 
@@ -108,12 +112,13 @@ API conventions (see `/api/docs` for the full OpenAPI schema):
   (12 h); argon2id PIN hashes; tokens stored as sha256; lockout after 5 failures (15 min);
   reuse of a refresh token burns the whole credential family. Permissions enforced server-side
   for 5 roles — see `docs/permissions.md`; sensitive actions require `X-Reauth-Pin`.
-  **Demo PINs are 1234 — set `OPENBUNK_SEED_PIN`/disable seeding before production.**
+  **Demo seed PIN (6+ digits) comes from `OPENBUNK_SEED_PIN` and is empty by default; production
+  refuses weak/default PINs. Never leave demo employees on a real station.**
 - Structured error bodies: `{ "error": { "code", "message", "details", "requestId" } }`.
 - `X-Request-Id` on every response (echoed or generated); structured stdout logs.
 - List endpoints paginate (`limit`/`offset`, max 100) with totals.
-- `Idempotency-Key` required for `POST /api/v1/shifts/{id}/close`; optional for sales (replays
-  return the stored response with `X-Idempotent-Replay: true`).
+- `Idempotency-Key` is required for `POST /api/v1/shifts/{id}/close` and for sales/receipts; the key
+  is bound to a hash of the request body, so a different payload with the same key is rejected.
 - Money is NUMERIC(12,2) with half-up rounding; volumes NUMERIC(14,1).
 - Posted records are immutable; fuel stock moves only through append-only `stock_movements`;
   audit events are append-only (`/api/v1/audit`, owner/manager only).

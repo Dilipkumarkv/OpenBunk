@@ -202,18 +202,22 @@ export default function Credit() {
         </div>
         <div className="card">
           <div className="stat-top">Overdue</div>
-          <div className="value">₹ 28,400</div>
-          <div className="delta danger">4 accounts need follow-up</div>
+          <div className="value">{isLive ? '—' : '₹ 28,400'}</div>
+          <div className="delta danger">
+            {isLive ? 'Not calculated by the API yet' : '4 accounts need follow-up'}
+          </div>
         </div>
         <div className="card">
           <div className="stat-top">Credit sales today</div>
-          <div className="value">₹ 18,650</div>
-          <div className="small">7 transactions</div>
+          <div className="value">{isLive ? '—' : '₹ 18,650'}</div>
+          <div className="small">{isLive ? 'Not aggregated by the API yet' : '7 transactions'}</div>
         </div>
         <div className="card">
           <div className="stat-top">Collections today</div>
-          <div className="value">₹ 12,000</div>
-          <div className="delta">3 receipts</div>
+          <div className="value">{isLive ? '—' : '₹ 12,000'}</div>
+          <div className="delta">
+            {isLive ? 'See the Reports page for collections' : '3 receipts'}
+          </div>
         </div>
       </div>
 

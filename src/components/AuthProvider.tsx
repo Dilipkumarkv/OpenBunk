@@ -44,6 +44,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Keep the connection label honest as the network changes.
+  useEffect(() => {
+    const recheck = () => {
+      void recheckConnection()
+    }
+    const markOffline = () => setOnline(false)
+    window.addEventListener('focus', recheck)
+    window.addEventListener('online', recheck)
+    window.addEventListener('offline', markOffline)
+    return () => {
+      window.removeEventListener('focus', recheck)
+      window.removeEventListener('online', recheck)
+      window.removeEventListener('offline', markOffline)
+    }
+  }, [recheckConnection])
+
   const login = useCallback(async (stationCode: string, employeeCode: string, pin: string) => {
     const me = await apiLogin(stationCode, employeeCode, pin)
     setSession(me)

@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..deps import audit, get_current_employee, get_db_dep, paginate, require_reauth, require_roles
 from ..errors import ApiError
-from ..models import Employee, FuelProduct, Nozzle, StockMovement, Tank
+from ..models import Employee, FuelPrice, FuelProduct, Nozzle, StockMovement, Tank, utcnow
+from ..pricing import current_price
 from ..schemas import (
+    FuelPriceCreate,
+    FuelPriceOut,
     FuelProductCreate,
     FuelProductOut,
     NozzleCreate,
@@ -41,6 +44,68 @@ def create_product(payload: FuelProductCreate, employee: Employee = Depends(requ
     db.commit()
     db.refresh(product)
     return product
+
+
+@router.get("/fuel-prices/current", response_model=list[FuelPriceOut])
+def list_current_prices(employee: Employee = Depends(get_current_employee), db: Session = Depends(get_db_dep)):
+    products = (
+        db.query(FuelProduct)
+        .filter(FuelProduct.station_id == employee.station_id)
+        .order_by(FuelProduct.name)
+        .all()
+    )
+    out = []
+    for product in products:
+        price = current_price(db, employee.station_id, product.id)
+        if price is None:
+            continue
+        out.append(
+            FuelPriceOut(
+                product_id=product.id,
+                product_code=product.code,
+                product_name=product.name,
+                unit_price=price,
+                effective_from=utcnow(),
+            )
+        )
+    return out
+
+
+@router.post("/fuel-prices", response_model=FuelPriceOut, status_code=status.HTTP_201_CREATED)
+def set_price(
+    payload: FuelPriceCreate,
+    employee: Employee = Depends(require_roles("owner", "manager")),
+    _: Employee = Depends(require_reauth),
+    db: Session = Depends(get_db_dep),
+):
+    product = db.get(FuelProduct, payload.product_id)
+    if product is None or product.station_id != employee.station_id:
+        raise ApiError(404, "Fuel product not found")
+    price = FuelPrice(
+        station_id=employee.station_id,
+        product_id=product.id,
+        unit_price=payload.unit_price,
+        effective_from=payload.effective_from or utcnow(),
+        created_by=employee.id,
+    )
+    db.add(price)
+    audit(
+        db,
+        station_id=employee.station_id,
+        action="catalog.price_changed",
+        entity_type="fuel_product",
+        entity_id=product.id,
+        payload={"unit_price": str(payload.unit_price), "effective_from": price.effective_from.isoformat()},
+        actor=employee.id,
+    )
+    db.commit()
+    return FuelPriceOut(
+        product_id=product.id,
+        product_code=product.code,
+        product_name=product.name,
+        unit_price=price.unit_price,
+        effective_from=price.effective_from,
+    )
 
 
 @router.get("/tanks", response_model=list[TankOut])
@@ -89,6 +154,8 @@ def create_nozzle(payload: NozzleCreate, employee: Employee = Depends(require_ro
     product = db.get(FuelProduct, payload.product_id)
     if product is None or product.station_id != employee.station_id:
         raise ApiError(404, "Fuel product not found")
+    if tank.product_id != product.id:
+        raise ApiError(422, "Nozzle product must match the tank's product")
     existing = db.query(Nozzle).filter(Nozzle.station_id == employee.station_id, Nozzle.label == payload.label).first()
     if existing is not None:
         raise ApiError(409, "Nozzle label already exists")

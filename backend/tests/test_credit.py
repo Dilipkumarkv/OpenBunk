@@ -36,14 +36,34 @@ def test_credit_customer_lifecycle_and_limit_status(client, manager_token):
     assert len(ledger.json()["entries"]) == 2
 
 
-def test_credit_over_limit_flagged(client, manager_token):
+def test_credit_over_limit_is_rejected_and_owner_can_override(client, manager_token, owner_token):
     customer = _create_customer(client, manager_token, code="AC-021", name="Ravi Enterprises", limit="25000")
     response = client.post(
         f"/api/v1/credit/customers/{customer['id']}/entries",
         headers=auth(manager_token),
         json={"type": "charge", "amount": "28400"},
     )
-    assert response.json()["limit_status"] == "over_limit"
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["code"] == "credit_limit_exceeded"
+
+    # manager cannot override, even with a reason
+    manager_override = client.post(
+        f"/api/v1/credit/customers/{customer['id']}/entries",
+        headers=auth(manager_token),
+        json={"type": "charge", "amount": "28400", "override_limit_reason": "customer promises to pay"},
+    )
+    assert manager_override.status_code == 422
+
+    override = client.post(
+        f"/api/v1/credit/customers/{customer['id']}/entries",
+        headers=auth(owner_token),
+        json={"type": "charge", "amount": "28400", "override_limit_reason": "owner approved temporary excess"},
+    )
+    assert override.status_code == 201
+    assert override.json()["limit_status"] == "over_limit"
+
+    audit = client.get("/api/v1/audit", headers=auth(owner_token)).json()
+    assert any(e["action"] == "credit.limit_override" for e in audit)
 
 
 def test_duplicate_account_code_conflicts(client, manager_token):

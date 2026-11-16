@@ -18,7 +18,7 @@ logger = get_logger("openbunk.main")
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenBunk API",
-        version="0.4.0",
+        version="0.9.1",
         docs_url="/api/docs" if not settings.is_production else None,
         openapi_url="/api/openapi.json" if not settings.is_production else None,
     )
@@ -53,6 +53,8 @@ def create_app() -> FastAPI:
             "Idempotency-Key",
             "X-Request-Id",
             "X-Reauth-Pin",
+            "X-Approval-Code",
+            "X-Approval-Pin",
         ],
     )
 

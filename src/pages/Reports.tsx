@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
-import { getJson, request } from '../lib/api'
+import { getJson, request, ApiAuthError, ApiOfflineError } from '../lib/api'
 import { money } from '../lib/format'
 import { collectionBreakdown, dailySales, reportCatalogue } from '../data/sampleData'
 
@@ -28,6 +28,12 @@ export default function Reports() {
   const toast = useToast()
   const { session } = useAuth()
   const [live, setLive] = useState<LiveReports | null>(null)
+  const [exportPin, setExportPin] = useState('')
+  const [exporting, setExporting] = useState(false)
+
+  const canExport = Boolean(
+    session && ['owner', 'manager', 'accountant', 'auditor'].includes(session.employee.role),
+  )
 
   useEffect(() => {
     if (!session) return
@@ -88,13 +94,29 @@ export default function Reports() {
 
   const downloadCsv = async (type: 'sales' | 'collections') => {
     if (!session) {
-      toast('Demo: sign in to download CSV exports.')
+      toast('Demo only: sign in to download CSV exports.')
       return
     }
+    if (!canExport) {
+      toast('Your role cannot export CSV data.')
+      return
+    }
+    if (exportPin.length < 6) {
+      toast('Enter your 6+ digit PIN to authorize the export.')
+      return
+    }
+    setExporting(true)
     try {
-      const response = await request(`/api/v1/export.csv?type=${type}`)
+      const response = await request(
+        `/api/v1/export.csv?type=${type}`,
+        { headers: { 'X-Reauth-Pin': exportPin } },
+        { retryAuth: false },
+      )
       if (!response.ok) {
-        toast(`Export failed (${response.status}).`)
+        if (response.status === 401) toast('PIN rejected — export not downloaded.')
+        else if (response.status === 429) toast('Re-authentication is locked — try again later.')
+        else if (response.status === 403) toast('Your role cannot export this data.')
+        else toast(`Export failed (${response.status}).`)
         return
       }
       const blob = await response.blob()
@@ -104,9 +126,15 @@ export default function Reports() {
       a.download = `openbunk-${type}.csv`
       a.click()
       URL.revokeObjectURL(url)
-      toast(`Downloaded openbunk-${type}.csv`)
-    } catch {
-      toast('Backend not reachable — export not possible.')
+      setExportPin('')
+      toast(`Downloaded openbunk-${type}.csv from the server.`)
+    } catch (error) {
+      if (error instanceof ApiAuthError) toast('Session expired — sign in again to export.')
+      else if (error instanceof ApiOfflineError)
+        toast('Backend not reachable — export not possible.')
+      else toast('Export failed — nothing was downloaded.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -118,14 +146,39 @@ export default function Reports() {
           <div className="sub">Operational and financial summaries.</div>
         </div>
         <div className="actions">
-          <button className="btn" onClick={() => void downloadCsv('sales')}>
+          <input
+            type="password"
+            inputMode="numeric"
+            aria-label="PIN for CSV export"
+            placeholder="Export PIN"
+            value={exportPin}
+            onChange={(event) => setExportPin(event.target.value)}
+            disabled={!canExport || exporting}
+            style={{ maxWidth: 130 }}
+          />
+          <button
+            className="btn"
+            onClick={() => void downloadCsv('sales')}
+            disabled={!canExport || exporting}
+          >
             ⇩ Sales CSV
           </button>
-          <button className="btn" onClick={() => void downloadCsv('collections')}>
+          <button
+            className="btn"
+            onClick={() => void downloadCsv('collections')}
+            disabled={!canExport || exporting}
+          >
             ⇩ Collections CSV
           </button>
         </div>
       </div>
+
+      {session && !canExport && (
+        <div className="notice">
+          ⓘ CSV export requires an owner, manager, accountant or auditor. Your role can view the
+          reports but not export them.
+        </div>
+      )}
 
       <div className="grid two">
         <div className="card">

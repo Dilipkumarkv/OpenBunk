@@ -6,8 +6,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..deps import get_db_dep, require_roles
-from ..domain import round2
-from ..models import Employee, FuelProduct, MeterReading, Nozzle, Payment, Sale, Shift
+from ..domain import compute_volume, round2
+from ..models import Employee, FuelProduct, MeterReading, Nozzle, Payment, Shift
 from ..schemas import CollectionSlice, CollectionsOut, DailySalesOut, ProductTotal
 
 router = APIRouter(tags=["reports"])
@@ -19,26 +19,42 @@ def daily_sales(
     employee: Employee = Depends(require_roles("owner", "manager", "accountant", "auditor")),
     db: Session = Depends(get_db_dep),
 ):
-    """Metre-based daily sales: sums volumes/values of closed shifts' readings for the date."""
+    """Metre-based daily sales, applying the rollover value stored at shift close."""
     rows = (
-        db.query(FuelProduct.name, func.coalesce(func.sum(MeterReading.closing_litres - MeterReading.opening_litres), Decimal("0")), func.coalesce(func.sum((MeterReading.closing_litres - MeterReading.opening_litres) * MeterReading.unit_price), Decimal("0")))
-        .join(Nozzle, Nozzle.product_id == FuelProduct.id)
-        .join(MeterReading, MeterReading.nozzle_id == Nozzle.id)
+        db.query(MeterReading, Nozzle, FuelProduct, Shift)
+        .join(Nozzle, Nozzle.id == MeterReading.nozzle_id)
+        .join(FuelProduct, FuelProduct.id == Nozzle.product_id)
         .join(Shift, Shift.id == MeterReading.shift_id)
         .filter(
             Shift.station_id == employee.station_id,
             Shift.business_date == date_param,
             Shift.status == "closed",
         )
-        .group_by(FuelProduct.name)
         .all()
     )
-    totals = [ProductTotal(product=name, volume_litres=vol, amount=round2(amt)) for name, vol, amt in rows]
+
+    totals: dict[str, list[Decimal]] = {}
+    for reading, _nozzle, product, shift in rows:
+        rollover = None
+        if shift.rollover_values:
+            code = (product.code or "").lower()
+            raw = shift.rollover_values.get(code)
+            if raw is not None:
+                rollover = Decimal(str(raw))
+        volume = compute_volume(reading.opening_litres, reading.closing_litres, rollover)
+        bucket = totals.setdefault(product.name, [Decimal("0"), Decimal("0")])
+        bucket[0] += volume
+        bucket[1] += round2(volume * reading.unit_price)
+
+    product_totals = [
+        ProductTotal(product=name, volume_litres=volume, amount=round2(amount))
+        for name, (volume, amount) in sorted(totals.items())
+    ]
     return DailySalesOut(
         date=date_param,
-        totals=totals,
-        grand_total_amount=round2(sum((t.amount for t in totals), Decimal("0"))),
-        grand_total_litres=sum((t.volume_litres for t in totals), Decimal("0")),
+        totals=product_totals,
+        grand_total_amount=round2(sum((t.amount for t in product_totals), Decimal("0"))),
+        grand_total_litres=sum((t.volume_litres for t in product_totals), Decimal("0")),
     )
 
 
@@ -52,7 +68,12 @@ def collections(
     end = start + timedelta(days=1)
     rows = (
         db.query(Payment.mode, func.coalesce(func.sum(Payment.amount), Decimal("0")))
-        .filter(Payment.station_id == employee.station_id, Payment.created_at >= start, Payment.created_at < end)
+        .filter(
+            Payment.station_id == employee.station_id,
+            Payment.created_at >= start,
+            Payment.created_at < end,
+            Payment.mode != "credit",  # credit is receivable, not collected cash
+        )
         .group_by(Payment.mode)
         .all()
     )

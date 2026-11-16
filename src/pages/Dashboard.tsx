@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useToast } from '../components/toastContext'
 import { useAuth } from '../components/authContext'
 import { getJson } from '../lib/api'
 import { money } from '../lib/format'
@@ -68,7 +67,6 @@ function greeting(): string {
 }
 
 export default function Dashboard() {
-  const toast = useToast()
   const navigate = useNavigate()
   const { session } = useAuth()
   const [live, setLive] = useState<LiveState>(EMPTY_LIVE)
@@ -177,9 +175,9 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="actions">
-          <button className="btn" onClick={() => toast('Demo data exported (prototype action).')}>
-            ⇩ Export
-          </button>
+          <Link className="btn" to="/reports">
+            ⇩ Exports
+          </Link>
           <button className="btn primary" onClick={() => navigate('/shifts')}>
             ＋ Close a shift
           </button>
@@ -298,17 +296,26 @@ export default function Dashboard() {
         <div className="card">
           <div className="cardhead">
             <h3>Shift status</h3>
-            <span className="pill green">2 completed</span>
+            <span className={isLive ? 'pill blue' : 'pill green'}>
+              {isLive ? 'Sample' : 'Demo sample'}
+            </span>
           </div>
-          {shiftStatus.map((shift) => (
-            <div className="shift-row" key={shift.name}>
-              <div>
-                <b>{shift.name}</b>
-                <div className="small">{shift.meta}</div>
+          {isLive ? (
+            <p className="small" style={{ marginBottom: 10 }}>
+              Live drafts and closed shifts are on the Shift &amp; readings page. This dashboard
+              card is illustrative and is not loaded from the API.
+            </p>
+          ) : (
+            shiftStatus.map((shift) => (
+              <div className="shift-row" key={shift.name}>
+                <div>
+                  <b>{shift.name}</b>
+                  <div className="small">{shift.meta}</div>
+                </div>
+                <span className={`pill ${shift.tone}`}>{shift.status}</span>
               </div>
-              <span className={`pill ${shift.tone}`}>{shift.status}</span>
-            </div>
-          ))}
+            ))
+          )}
           <Link to="/shifts" className="btn block">
             View shift register →
           </Link>

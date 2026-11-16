@@ -1,45 +1,50 @@
-"""Backup → wipe → restore roundtrip must reproduce an identical verified dataset,
-	including credential hashes (a restored employee keeps a working PIN hash).
-"""
+"""Native backup → mutate → verified restore roundtrip (SQLite; CI also uses Postgres)."""
 
-import json
+import pytest
+from sqlalchemy import inspect, text
 
-from sqlalchemy import create_engine, func, select
-
-from app.backup import dump_database, restore_database
-from app.config import get_settings
-from app.models import Base, Employee
+from app.backup import create_backup, restore_backup
+from app.db import engine
 
 
-def _counts(engine):
+def _counts():
     with engine.connect() as conn:
         return {
-            table.name: conn.execute(select(func.count()).select_from(table)).scalar()
-            for table in Base.metadata.sorted_tables
+            table: conn.execute(text(f'SELECT COUNT(*) FROM "{table}"')).scalar()
+            for table in inspect(engine).get_table_names()
         }
 
 
-def test_backup_restore_roundtrip():
-    settings = get_settings()
-    kwargs = {"connect_args": {"check_same_thread": False}} if settings.DATABASE_URL.startswith("sqlite") else {}
-    engine_source = create_engine(settings.DATABASE_URL, **kwargs)
-
-    before = _counts(engine_source)
+def test_backup_restore_roundtrip(tmp_path):
+    before = _counts()
     assert before["stations"] == 1
     assert before["employees"] == 5
 
-    dump = dump_database(engine_source)
-    serialized = json.dumps(dump, default=str)
-    restored_data = json.loads(serialized)  # through the JSON boundary, like a real backup file
+    path = tmp_path / "openbunk.dump"
+    manifest = create_backup(engine, path)
+    assert manifest["sha256"]
+    assert manifest["row_counts"] == before
+    assert (tmp_path / "openbunk.dump.manifest.json").exists()
 
-    counts = restore_database(engine_source, restored_data)
-    after = _counts(engine_source)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM audit_events"))
 
-    assert after == before
-    assert sum(counts.values()) == sum(before.values())
+    result = restore_backup(engine, path, force=True)
+    assert _counts() == before
+    assert result["row_counts"] == before
 
-    # restored rows are actually usable: hashes survive the roundtrip
-    with engine_source.connect() as conn:
-        row = conn.execute(select(Employee.pin_hash).where(Employee.code == "EMP-01")).first()
-        assert row is not None and row[0] and row[0].startswith("$argon2")
 
+def test_restore_requires_force(tmp_path):
+    path = tmp_path / "forced.dump"
+    create_backup(engine, path)
+    with pytest.raises(ValueError, match="--force"):
+        restore_backup(engine, path)
+
+
+def test_restore_rejects_corrupted_backup(tmp_path):
+    path = tmp_path / "corrupt.dump"
+    create_backup(engine, path)
+    with path.open("ab") as handle:
+        handle.write(b"tampered")
+    with pytest.raises(ValueError, match="checksum"):
+        restore_backup(engine, path, force=True)

@@ -4,7 +4,7 @@ from app.deps import enforce_rate_limit
 from app.errors import ApiError
 
 
-def _login(client, code="EMP-01", pin="1234"):
+def _login(client, code="EMP-01", pin="123456"):
     return client.post(
         "/api/v1/session",
         json={"station_code": "OB-001", "employee_code": code, "pin": pin},
@@ -12,7 +12,7 @@ def _login(client, code="EMP-01", pin="1234"):
 
 
 def test_session_requires_valid_pin(client):
-    response = _login(client, pin="0000")
+    response = _login(client, pin="000000")
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "unauthorized"
     assert "requestId" in response.json()["error"]

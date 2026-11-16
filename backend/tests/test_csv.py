@@ -4,7 +4,7 @@ from conftest import auth
 
 
 def test_export_csv_sales(client, owner_token):
-    response = client.get("/api/v1/export.csv?type=sales", headers=auth(owner_token))
+    response = client.get("/api/v1/export.csv?type=sales", headers={**auth(owner_token), "X-Reauth-Pin": "123456"})
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
     assert "sales.csv" in response.headers["content-disposition"]
@@ -13,7 +13,7 @@ def test_export_csv_sales(client, owner_token):
 
 
 def test_export_csv_collections(client, manager_token):
-    response = client.get("/api/v1/export.csv?type=collections", headers=auth(manager_token))
+    response = client.get("/api/v1/export.csv?type=collections", headers={**auth(manager_token), "X-Reauth-Pin": "123456"})
     assert response.status_code == 200
     assert response.text.startswith("date,mode,amount")
 

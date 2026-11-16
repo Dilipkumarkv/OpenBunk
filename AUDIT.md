@@ -12,6 +12,10 @@
 
 > **Prototype only. Do not enter real station, cash, credit, or stock data into this build.**
 
+> **Wave 0 update (2026-11-16):** the seven P0 blockers below were remediated in the working tree after
+> this audit; see `STATUS.md` → “Wave 0 — P0 remediation” for the exact changes and verification
+> commands. The verdict above still applies until CI, staging and operator UAT re-verify the build.
+
 The engineering foundation is better than the average prototype: clean domain modules, real money types,
 server-enforced station scoping, hashed tokens, a sensible CI pipeline, and unusually honest documentation
 intent. But the **financial control plane is not sound**. Credit limits are advisory, sale prices are

@@ -21,7 +21,7 @@ export default function Login() {
       navigate('/', { replace: true })
     } catch (err) {
       if (err instanceof ApiOfflineError) {
-        setError('Backend is not reachable. You can continue in demo mode.')
+        setError('Backend is not reachable. Demo mode is available, but nothing is saved.')
       } else if (err instanceof ApiHttpError) {
         setError(err.status === 429 ? err.message : 'Invalid station code, employee code or PIN.')
       } else {
@@ -68,10 +68,11 @@ export default function Login() {
           <input
             id="pin"
             type="password"
+            inputMode="numeric"
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             autoComplete="current-password"
-            minLength={4}
+            minLength={6}
             required
           />
         </div>
@@ -106,7 +107,8 @@ export default function Login() {
           Continue in demo mode →
         </button>
         <p className="small" style={{ marginTop: 12, textAlign: 'center' }}>
-          Demo credentials: EMP-00…EMP-04, PIN 1234 (development only)
+          PINs are at least 6 digits. Demo accounts are EMP-00…EMP-04 in development only; ask the
+          station owner for your PIN. Production deploys do not seed demo employees.
         </p>
       </form>
     </div>

@@ -102,3 +102,67 @@ export function parseMeterReading(raw: string): number | null {
 export function parseMeterReadingOrZero(raw: string): number {
   return parseMeterReading(raw) ?? 0
 }
+
+/**
+ * A nozzle row as the shift form holds it: raw operator strings plus the
+ * server-configured price. Kept framework-free so it can be unit tested.
+ */
+export interface NozzleReadingInput {
+  nozzleId: string
+  label: string
+  productCode: string
+  productName: string
+  opening: string
+  closing: string
+  /** Server-configured price per litre, as a decimal string. Never operator-editable. */
+  unitPrice: string
+}
+
+export interface NozzleLineTotal {
+  nozzleId: string
+  label: string
+  productCode: string
+  productName: string
+  volume: number
+  unitPrice: number
+  value: number
+}
+
+export interface NozzleTotals {
+  lines: NozzleLineTotal[]
+  totalLitres: number
+  totalValue: number
+}
+
+/**
+ * Computes per-nozzle volume/value for every configured nozzle.
+ * `rollover` is keyed by product code (e.g. petrol/diesel) and only applies when
+ * an operator has explicitly authorized it for that fuel.
+ */
+export function computeNozzleTotals(
+  readings: NozzleReadingInput[],
+  rollover: Record<string, number | undefined> = {},
+): NozzleTotals {
+  const lines = readings.map((reading): NozzleLineTotal => {
+    const volume = computeVolume(
+      parseMeterReadingOrZero(reading.opening),
+      parseMeterReadingOrZero(reading.closing),
+      rollover[reading.productCode],
+    )
+    const unitPrice = parseMeterReadingOrZero(reading.unitPrice)
+    return {
+      nozzleId: reading.nozzleId,
+      label: reading.label,
+      productCode: reading.productCode,
+      productName: reading.productName,
+      volume,
+      unitPrice,
+      value: round2(volume * unitPrice) + 0,
+    }
+  })
+  return {
+    lines,
+    totalLitres: round2(lines.reduce((sum, line) => sum + line.volume, 0)),
+    totalValue: round2(lines.reduce((sum, line) => sum + line.value, 0)),
+  }
+}

@@ -1,5 +1,7 @@
 from conftest import auth
 
+CLOSE_COLLECTIONS = {"collections": {"cash": "79615.00"}}
+
 
 def _nozzles_by_label(client, token):
     response = client.get("/api/v1/nozzles", headers=auth(token))
@@ -25,22 +27,21 @@ def _put_prototype_readings(client, token, shift_id, nozzles):
         headers=auth(token),
         json={
             "readings": [
-                {
-                    "nozzle_id": nozzles["P1"]["id"],
-                    "opening_litres": "12450",
-                    "closing_litres": "12780",
-                    "unit_price": "102.50",
-                },
-                {
-                    "nozzle_id": nozzles["D1"]["id"],
-                    "opening_litres": "22500",
-                    "closing_litres": "22920",
-                    "unit_price": "89.50",
-                },
+                {"nozzle_id": nozzles["P1"]["id"], "opening_litres": "12450", "closing_litres": "12780"},
+                {"nozzle_id": nozzles["P2"]["id"], "opening_litres": "9000", "closing_litres": "9080"},
+                {"nozzle_id": nozzles["D1"]["id"], "opening_litres": "22500", "closing_litres": "22920"},
             ]
         },
     )
     assert response.status_code == 200
+
+
+def _close(client, token, shift_id, key, body):
+    return client.post(
+        f"/api/v1/shifts/{shift_id}/close",
+        headers={**auth(token), "X-Reauth-Pin": "123456", "Idempotency-Key": key},
+        json=body,
+    )
 
 
 def test_shift_open_validate_close_happy_path(client, manager_token):
@@ -56,16 +57,14 @@ def test_shift_open_validate_close_happy_path(client, manager_token):
     assert validation.status_code == 200
     assert validation.json()["valid"] is True
 
-    closed = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "test-close-1"},
-        json={},
-    )
+    closed = _close(client, manager_token, shift["id"], "test-close-1", CLOSE_COLLECTIONS)
     assert closed.status_code == 200
     body = closed.json()
     assert body["status"] == "closed"
-    assert body["revenue_total"] == "71415.00"
-    assert body["readings_processed"] == 2
+    assert body["revenue_total"] == "79615.00"
+    assert body["readings_processed"] == 3
+    assert body["variance"] == "0.00"
+    assert body["reconciliation_status"] == "balanced"
 
 
 def test_close_requires_idempotency_key(client, manager_token):
@@ -74,10 +73,18 @@ def test_close_requires_idempotency_key(client, manager_token):
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
     response = client.post(
         f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234"},
-        json={},
+        headers={**auth(manager_token), "X-Reauth-Pin": "123456"},
+        json=CLOSE_COLLECTIONS,
     )
     assert response.status_code == 400
+
+
+def test_close_requires_collections(client, manager_token):
+    nozzles = _nozzles_by_label(client, manager_token)
+    shift = _open_shift(client, manager_token)
+    _put_prototype_readings(client, manager_token, shift["id"], nozzles)
+    response = _close(client, manager_token, shift["id"], "no-collections", {})
+    assert response.status_code == 422
 
 
 def test_close_is_idempotent(client, manager_token):
@@ -85,28 +92,20 @@ def test_close_is_idempotent(client, manager_token):
     shift = _open_shift(client, manager_token)
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
 
-    first = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-42"},
-        json={},
-    )
+    first = _close(client, manager_token, shift["id"], "idem-key-42", CLOSE_COLLECTIONS)
     assert first.status_code == 200
 
-    replay = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-42"},
-        json={},
-    )
+    replay = _close(client, manager_token, shift["id"], "idem-key-42", CLOSE_COLLECTIONS)
     assert replay.status_code == 200
     assert replay.headers.get("X-Idempotent-Replay") == "true"
     assert replay.json()["revenue_total"] == first.json()["revenue_total"]
 
+    # reusing the key with a different request is rejected
+    changed = _close(client, manager_token, shift["id"], "idem-key-42", {"collections": {"cash": "1.00"}})
+    assert changed.status_code == 409
+
     # a fresh key after close conflicts instead of double-counting
-    second = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "idem-key-43"},
-        json={},
-    )
+    second = _close(client, manager_token, shift["id"], "idem-key-43", CLOSE_COLLECTIONS)
     assert second.status_code == 409
 
 
@@ -115,16 +114,12 @@ def test_close_deducts_tank_stock(client, manager_token):
     tanks = _tanks_by_label(client, manager_token)
     shift = _open_shift(client, manager_token)
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
-    response = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "stock-close-1"},
-        json={},
-    )
+    response = _close(client, manager_token, shift["id"], "stock-close-1", CLOSE_COLLECTIONS)
     assert response.status_code == 200
 
     stock = client.get(f"/api/v1/tanks/{tanks['T-01']['id']}/stock", headers=auth(manager_token))
     assert stock.status_code == 200
-    assert stock.json()["book_stock_litres"] == "8090.0"  # 8420 - 330
+    assert stock.json()["book_stock_litres"] == "8010.0"  # 8420 - (330 + 80)
 
 
 def test_closing_below_opening_blocks_close(client, manager_token):
@@ -135,18 +130,9 @@ def test_closing_below_opening_blocks_close(client, manager_token):
         headers=auth(manager_token),
         json={
             "readings": [
-                {
-                    "nozzle_id": nozzles["P1"]["id"],
-                    "opening_litres": "12450",
-                    "closing_litres": "12000",
-                    "unit_price": "102.50",
-                },
-                {
-                    "nozzle_id": nozzles["D1"]["id"],
-                    "opening_litres": "22500",
-                    "closing_litres": "22920",
-                    "unit_price": "89.50",
-                },
+                {"nozzle_id": nozzles["P1"]["id"], "opening_litres": "12450", "closing_litres": "12000"},
+                {"nozzle_id": nozzles["P2"]["id"], "opening_litres": "9000", "closing_litres": "9080"},
+                {"nozzle_id": nozzles["D1"]["id"], "opening_litres": "22500", "closing_litres": "22920"},
             ]
         },
     )
@@ -157,12 +143,28 @@ def test_closing_below_opening_blocks_close(client, manager_token):
     assert validation.json()["valid"] is False
     assert any("below opening" in i["message"] for i in validation.json()["issues"])
 
-    closed = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "bad-readings-close"},
-        json={},
-    )
+    closed = _close(client, manager_token, shift["id"], "bad-readings-close", CLOSE_COLLECTIONS)
     assert closed.status_code == 422
+
+
+def test_missing_active_nozzle_blocks_close(client, manager_token):
+    nozzles = _nozzles_by_label(client, manager_token)
+    shift = _open_shift(client, manager_token)
+    client.put(
+        f"/api/v1/shifts/{shift['id']}/readings",
+        headers=auth(manager_token),
+        json={
+            "readings": [
+                {"nozzle_id": nozzles["P1"]["id"], "opening_litres": "12450", "closing_litres": "12780"},
+                {"nozzle_id": nozzles["D1"]["id"], "opening_litres": "22500", "closing_litres": "22920"},
+            ]
+        },
+    )
+    validation = client.post(
+        f"/api/v1/shifts/{shift['id']}/validate", headers=auth(manager_token), json={}
+    )
+    assert validation.json()["valid"] is False
+    assert any(i["field"] == "nozzle P2" for i in validation.json()["issues"])
 
 
 def test_rollover_authorized_allows_wrap(client, manager_token):
@@ -173,44 +175,30 @@ def test_rollover_authorized_allows_wrap(client, manager_token):
         headers=auth(manager_token),
         json={
             "readings": [
-                {
-                    "nozzle_id": nozzles["P1"]["id"],
-                    "opening_litres": "99990",
-                    "closing_litres": "20",
-                    "unit_price": "100.00",
-                },
-                {
-                    "nozzle_id": nozzles["D1"]["id"],
-                    "opening_litres": "500",
-                    "closing_litres": "800",
-                    "unit_price": "90.00",
-                },
+                {"nozzle_id": nozzles["P1"]["id"], "opening_litres": "99990", "closing_litres": "20"},
+                {"nozzle_id": nozzles["P2"]["id"], "opening_litres": "9000", "closing_litres": "9080"},
+                {"nozzle_id": nozzles["D1"]["id"], "opening_litres": "500", "closing_litres": "800"},
             ]
         },
     )
-    close = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "rollover-close-1"},
-        json={
-            "rollover": {
-                "petrol": True,
-                "diesel": False,
-                "petrol_rollover_value": "100000",
-            }
+    close = _close(
+        client,
+        manager_token,
+        shift["id"],
+        "rollover-close-1",
+        {
+            "rollover": {"petrol": True, "diesel": False, "petrol_rollover_value": "100000"},
+            "collections": {"cash": "38125.00"},
         },
     )
     assert close.status_code == 200
-    # petrol 30 L * 100.00 + diesel 300 L * 90.00 = 3000 + 27000
-    assert close.json()["revenue_total"] == "30000.00"
+    # petrol 30 L * 102.50 + P2 80 L * 102.50 + diesel 300 L * 89.50 = 38125
+    assert close.json()["revenue_total"] == "38125.00"
 
 
 def test_close_with_no_readings_is_422(client, manager_token):
     shift = _open_shift(client, manager_token)
-    response = client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "empty-close-1"},
-        json={},
-    )
+    response = _close(client, manager_token, shift["id"], "empty-close-1", {"collections": {"cash": "0"}})
     assert response.status_code == 422
 
 
@@ -218,22 +206,15 @@ def test_readings_cannot_change_after_close(client, manager_token):
     nozzles = _nozzles_by_label(client, manager_token)
     shift = _open_shift(client, manager_token)
     _put_prototype_readings(client, manager_token, shift["id"], nozzles)
-    client.post(
-        f"/api/v1/shifts/{shift['id']}/close",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234", "Idempotency-Key": "immutability-close"},
-        json={},
-    )
+    closed = _close(client, manager_token, shift["id"], "immutability-close", CLOSE_COLLECTIONS)
+    assert closed.status_code == 200
+
     response = client.put(
         f"/api/v1/shifts/{shift['id']}/readings",
         headers=auth(manager_token),
         json={
             "readings": [
-                {
-                    "nozzle_id": nozzles["P1"]["id"],
-                    "opening_litres": "1",
-                    "closing_litres": "2",
-                    "unit_price": "1.00",
-                }
+                {"nozzle_id": nozzles["P1"]["id"], "opening_litres": "1", "closing_litres": "2"},
             ]
         },
     )

@@ -53,7 +53,7 @@ def client():
 def _login(client, code):
     response = client.post(
         "/api/v1/session",
-        json={"station_code": "OB-001", "employee_code": code, "pin": "1234"},
+        json={"station_code": "OB-001", "employee_code": code, "pin": "123456"},
     )
     assert response.status_code == 201, response.text
     return response.json()["access_token"]

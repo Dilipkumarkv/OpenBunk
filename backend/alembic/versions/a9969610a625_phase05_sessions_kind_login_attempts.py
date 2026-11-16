@@ -32,7 +32,10 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('station_id', 'employee_code', name='uq_login_attempt_key')
     )
-    op.add_column('session_tokens', sa.Column('kind', sa.String(length=16), nullable=False))
+    op.add_column(
+        'session_tokens',
+        sa.Column('kind', sa.String(length=16), nullable=False, server_default='access'),
+    )
     # ### end Alembic commands ###
 
 

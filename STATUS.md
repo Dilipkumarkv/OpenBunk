@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-All nine phases complete. Verdict: **Prototype v0.9 - CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md). An external audit (`AUDIT.md`, 2026-11-16) found P0 blockers; the prototype label stands and no real data should be entered until Wave 0 is complete.
+All nine phases complete and Wave 0 P0 remediation implemented. Verdict: **Prototype v0.9 - CI-green; owner must approve any move beyond prototype** (see docs/release-readiness.md). The external audit (`AUDIT.md`, 2026-11-16) found seven P0 blockers; Wave 0 addresses them in code and tests (see the Wave 0 section), but the prototype label stands until CI, staging and operator UAT are re-verified.
 
 ## Requirements
 
@@ -401,7 +401,54 @@ while running on container start; JSON backup/restore is not a safe DR mechanism
 false "Connected" states can be written as real data. The report includes a four-wave upgrade plan, an
 improvement backlog, product enhancements, and a claim-by-claim documentation correction table.
 
-**No code was changed by the audit.** Remediation is not started; Wave 0 must precede any pilot discussion.
+**No code was changed by the audit.** Wave 0 (the seven P0 blockers) is implemented — see the
+Wave 0 section below for exact commands and remaining caveats.
+
+## Wave 0 — P0 remediation (2026-11-16)
+
+Scope authorised by the owner: fix the seven P0 blockers before any pilot discussion. No deployment
+was performed; the release label remains **Prototype v0.9**.
+
+**What changed (code):**
+
+- **P0-1 credit enforcement** — `backend/app/credit_service.py`: locked customer row, hard limit
+  rejection on credit sales/entries, owner-only override with reason + audit (`credit.override`).
+- **P0-2 server pricing & attribution** — `fuel_prices` table with effective dates, `GET
+/api/v1/fuel-prices/current`, `POST /api/v1/fuel-prices`; sales and shift readings derive prices
+  server-side; nozzle→tank→product validated; sales/receipts require an `Idempotency-Key` bound to a
+  request hash; shift station/status checked on every mutation.
+- **P0-3 re-auth hardening** — `reauth_attempts` lockout (5 failures / 15 min), `reauth.failed` /
+  `reauth.locked` audit, sessions revoked on lock, re-auth required for employee creation, last-owner
+  guards, 6+ digit PIN policy everywhere.
+- **P0-4 reconciliation policy** — close requires `collections`; credit sales excluded from expected
+  cash; collections/variance/rollover persisted; variance over ₹1.00 needs a reason **and** a distinct
+  second approver (`X-Approval-Code` + `X-Approval-Pin`); rollover-aware reports and CSVs.
+- **P0-5 migration safety** — server defaults in historical revisions, SQLite batch mode, new
+  `d1e2f3a4b5c6` revision, `app/migrate.py` advisory-lock runner, populated upgrade/downgrade test.
+- **P0-6 backup/restore** — native `pg_dump -Fc` (Postgres) / backup API (SQLite), SHA-256 manifest,
+  atomic writes, forced restores, pre-restore snapshot, audit archive, row-count verification.
+- **P0-7 operator truthfulness** — signed-in shift form starts empty and hydrates from the server;
+  signed-out mode is clearly labelled demo; demo PIN hint removed; connection banner distinguishes
+  “Signed in · API unreachable”; dashboard/credit sample cards show “—” when live; CSV export requires
+  a PIN and honest error handling.
+- **Infra/config** — fail-closed `ENVIRONMENT` (required) with production guards, SQLite foreign keys,
+  dedicated `migrate` compose service (advisory lock; API never migrates), unprivileged nginx on 8080,
+  loopback-only web port, HSTS/CSP, `.dockerignore` files, CI Postgres client + `alembic check`.
+
+**Verification run locally (Windows, real commands):**
+
+- `npm run lint` → exit 0, no findings
+- `npm run type-check` → exit 0
+- `npm run test` → 9 files / 57 tests passed
+- `npm run format:check` → “All matched files use Prettier code style!”
+- `npm run build` → exit 0; `dist/` built (JS 330.25 kB / 100.30 kB gzip)
+- `backend: .venv\Scripts\python.exe -m pytest -q` → **77 passed, 1 warning**
+- Fresh SQLite database: `alembic upgrade head` → `d1e2f3a4b5c6`; `alembic check` → “No new upgrade
+  operations detected.”; `alembic downgrade base` then `upgrade head` → all four revisions replayed;
+  schema has 20 tables including `fuel_prices` and `reauth_attempts`
+
+**Not verified in this environment:** Docker/Compose (no Docker installed locally), PostgreSQL
+backup/restore outside CI, browser/print/screen-reader passes, Android device, host-level staging.
 
 ## Known limitations
 

@@ -2,9 +2,9 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..credit_service import balance_for, lock_customer, post_charge
 from ..deps import audit, get_db_dep, paginate, require_roles
 from ..domain import round2
 from ..errors import ApiError
@@ -21,16 +21,7 @@ router = APIRouter(tags=["credit"])
 
 
 def _balance(db: Session, customer_id: UUID) -> Decimal:
-    charges = db.query(func.coalesce(func.sum(CreditLedgerEntry.amount), Decimal("0"))).filter(
-        CreditLedgerEntry.customer_id == customer_id, CreditLedgerEntry.type == "charge"
-    ).scalar()
-    receipts = db.query(func.coalesce(func.sum(CreditLedgerEntry.amount), Decimal("0"))).filter(
-        CreditLedgerEntry.customer_id == customer_id, CreditLedgerEntry.type == "receipt"
-    ).scalar()
-    adjustments = db.query(func.coalesce(func.sum(CreditLedgerEntry.amount), Decimal("0"))).filter(
-        CreditLedgerEntry.customer_id == customer_id, CreditLedgerEntry.type == "adjustment"
-    ).scalar()
-    return round2(charges - receipts + adjustments)
+    return balance_for(db, customer_id)
 
 
 @router.post("/credit/customers", response_model=CreditCustomerOut, status_code=status.HTTP_201_CREATED)
@@ -96,17 +87,29 @@ def post_entry(
     employee: Employee = Depends(require_roles("owner", "manager", "accountant")),
     db: Session = Depends(get_db_dep),
 ):
-    customer = db.get(CreditCustomer, customer_id)
-    if customer is None or customer.station_id != employee.station_id:
-        raise ApiError(404, "Credit customer not found")
-    entry = CreditLedgerEntry(
-        station_id=employee.station_id,
-        customer_id=customer.id,
-        type=payload.type,
-        amount=payload.amount,
-        reason=payload.reason,
-    )
-    db.add(entry)
+    customer = lock_customer(db, employee.station_id, customer_id)
+    if payload.type == "charge":
+        entry = post_charge(
+            db,
+            station_id=employee.station_id,
+            customer_id=customer.id,
+            amount=payload.amount,
+            reason=payload.reason,
+            actor=employee,
+            override_reason=payload.override_limit_reason,
+        )
+    else:
+        if payload.override_limit_reason:
+            raise ApiError(422, "override_limit_reason is only valid for a charge")
+        entry = CreditLedgerEntry(
+            station_id=employee.station_id,
+            customer_id=customer.id,
+            type=payload.type,
+            amount=payload.amount,
+            reason=payload.reason,
+        )
+        db.add(entry)
+        db.flush()
     audit(
         db,
         station_id=employee.station_id,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computeNozzleTotals,
   computeShiftTotals,
   computeVolume,
   parseMeterReading,
@@ -113,5 +114,73 @@ describe('parseMeterReadingOrZero', () => {
     expect(parseMeterReadingOrZero('')).toBe(0)
     expect(parseMeterReadingOrZero('bad')).toBe(0)
     expect(parseMeterReadingOrZero('420')).toBe(420)
+  })
+})
+
+describe('computeNozzleTotals (dynamic nozzles)', () => {
+  const rows = [
+    {
+      nozzleId: 'p1',
+      label: 'P1',
+      productCode: 'petrol',
+      productName: 'Petrol',
+      opening: '12450',
+      closing: '12780',
+      unitPrice: '102.50',
+    },
+    {
+      nozzleId: 'p2',
+      label: 'P2',
+      productCode: 'petrol',
+      productName: 'Petrol',
+      opening: '9000',
+      closing: '9080',
+      unitPrice: '102.50',
+    },
+    {
+      nozzleId: 'd1',
+      label: 'D1',
+      productCode: 'diesel',
+      productName: 'Diesel',
+      opening: '22500',
+      closing: '22920',
+      unitPrice: '89.50',
+    },
+  ]
+
+  it('sums every nozzle with its own server price', () => {
+    const totals = computeNozzleTotals(rows)
+    expect(totals.lines.map((line) => line.volume)).toEqual([330, 80, 420])
+    expect(totals.totalLitres).toBe(830)
+    expect(totals.totalValue).toBe(79615)
+  })
+
+  it('applies a rollover only to the authorized product code', () => {
+    const totals = computeNozzleTotals(
+      [
+        {
+          nozzleId: 'p1',
+          label: 'P1',
+          productCode: 'petrol',
+          productName: 'Petrol',
+          opening: '99990',
+          closing: '20',
+          unitPrice: '100',
+        },
+        {
+          nozzleId: 'd1',
+          label: 'D1',
+          productCode: 'diesel',
+          productName: 'Diesel',
+          opening: '500',
+          closing: '800',
+          unitPrice: '90',
+        },
+      ],
+      { petrol: 100000 },
+    )
+    expect(totals.lines[0].volume).toBe(30)
+    expect(totals.lines[1].volume).toBe(300)
+    expect(totals.totalValue).toBe(30 * 100 + 300 * 90)
   })
 })

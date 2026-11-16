@@ -1,5 +1,6 @@
 # VCS / editors
 .git
+.github
 .gitignore
 .vscode
 .idea
@@ -9,12 +10,11 @@ node_modules
 dist
 coverage
 
-# Python / backend
-backend/.venv
+# Python / backend (built from its own context)
+backend
 **/__pycache__
 **/*.pyc
 .pytest_cache
-backend/*.db
 
 # Local env / data
 .env

@@ -44,8 +44,8 @@ jobs:
     name: Compose stack rehearsal
     runs-on: ubuntu-latest
     env:
-      OPENBUNK_SEED_PIN: '1234'
-      POSTGRES_PASSWORD: ci-staging-only
+      OPENBUNK_SEED_PIN: '246813'
+      POSTGRES_PASSWORD: ci-staging-only-password
       ENVIRONMENT: staging
     steps:
       - name: Checkout
@@ -55,7 +55,15 @@ jobs:
         run: docker compose build
 
       - name: Start stack
-        run: docker compose up -d --wait
+        run: |
+          docker compose up -d
+          # one-shot migrate service: block until it exits (non-zero fails the job)
+          docker compose wait migrate
+
+      - name: Migrations ran once in the dedicated service
+        run: |
+          docker compose logs migrate | grep -q 'Running upgrade'
+          docker compose ps --status exited migrate | grep -q 'migrate'
 
       - name: Seed demo station (rehearsal only)
         run: docker compose exec -T api python -m app.seed
@@ -67,7 +75,7 @@ jobs:
           curl --fail --retry 10 --retry-delay 2 -s http://localhost:8080/ | grep -i openbunk
           curl --fail -X POST http://localhost:8080/api/v1/session \
             -H 'Content-Type: application/json' \
-            -d '{"station_code":"OB-001","employee_code":"EMP-00","pin":"1234"}' | grep -q access_token
+            -d '{"station_code":"OB-001","employee_code":"EMP-00","pin":"246813"}' | grep -q access_token
 
       - name: Logs must not contain secrets
         run: |
@@ -109,11 +117,22 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --no-cache-dir -r backend/requirements.txt pip-audit
 
+      - name: Install PostgreSQL client tools (native pg_dump/pg_restore tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
       - name: Dependency vulnerability scan
         run: python -m pip_audit --requirement backend/requirements.txt --strict
 
       - name: Migration check (from empty database)
         run: python -m alembic upgrade head
+        working-directory: backend
+
+      - name: Models and migrations agree (alembic check)
+        run: python -m alembic check
+        working-directory: backend
+
+      - name: Advisory-lock migration runner is idempotent
+        run: python -m app.migrate
         working-directory: backend
 
       - name: Run backend tests (PostgreSQL)

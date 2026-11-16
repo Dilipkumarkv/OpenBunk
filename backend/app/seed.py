@@ -1,7 +1,7 @@
-"""Idempotent demo seed: station OB-001, fuel products, tanks, nozzles, demo employees.
+"""Idempotent demo seed: station OB-001, fuel products, tanks, nozzles, prices, demo employees.
 
-Demo PINs: from OPENBUNK_SEED_PIN, defaulting to 1234 — only outside production.
-In ENVIRONMENT=production, seeding is skipped unless OPENBUNK_SEED_PIN is set explicitly.
+Demo PIN: from OPENBUNK_SEED_PIN, defaulting to 123456 — only outside production.
+In ENVIRONMENT=production, employee seeding is skipped unless OPENBUNK_SEED_PIN is set explicitly.
 
 Demo logins: EMP-00 Deep (owner) · EMP-01 Ravi (manager) · EMP-02 Kumar (cashier)
              EMP-03 Manjunath (accountant) · EMP-04 Audit (auditor)
@@ -12,15 +12,15 @@ from decimal import Decimal
 
 from .config import get_settings
 from .db import SessionLocal
-from .models import Employee, FuelProduct, Nozzle, Station, Tank
+from .models import Employee, FuelPrice, FuelProduct, Nozzle, Station, Tank, utcnow
 from .security import hash_pin
 
-DEMO_PIN_FALLBACK = "1234"
+DEMO_PIN_FALLBACK = "123456"
 
 
 def _seed_pin() -> str | None:
     settings = get_settings()
-    pin = os.environ.get("OPENBUNK_SEED_PIN")
+    pin = os.environ.get("OPENBUNK_SEED_PIN") or settings.OPENBUNK_SEED_PIN
     if settings.is_production:
         if not pin:
             print("ENVIRONMENT=production and OPENBUNK_SEED_PIN unset — skipping employee seeding.")
@@ -47,6 +47,20 @@ def seed() -> None:
                 db.add(product)
                 db.flush()
             products[code] = product
+
+        for code, price in [("petrol", Decimal("102.50")), ("diesel", Decimal("89.50"))]:
+            configured = db.query(FuelPrice).filter(
+                FuelPrice.station_id == station.id, FuelPrice.product_id == products[code].id
+            ).first()
+            if configured is None:
+                db.add(
+                    FuelPrice(
+                        station_id=station.id,
+                        product_id=products[code].id,
+                        unit_price=price,
+                        effective_from=utcnow(),
+                    )
+                )
 
         tanks: dict[str, Tank] = {}
         for label, product_code, capacity, opening in [
@@ -108,7 +122,10 @@ def seed() -> None:
                     db.add(Employee(station_id=station.id, code=code, name=name, role=role, pin_hash=hash_pin(pin)))
 
         db.commit()
-    print("Seed complete: station OB-001 (demo employees EMP-00..EMP-04; PIN from OPENBUNK_SEED_PIN or 1234).")
+    print(
+        "Seed complete: station OB-001 (demo employees EMP-00..EMP-04; "
+        f"PIN from OPENBUNK_SEED_PIN or {DEMO_PIN_FALLBACK})."
+    )
 
 
 if __name__ == "__main__":

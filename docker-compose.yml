@@ -18,6 +18,22 @@ services:
     # never publish the database port; API talks to it over the internal network
     networks: [internal]
 
+  # Schema migrations run once, under a Postgres advisory lock, before the API starts.
+  # The API never migrates on boot, so a restart cannot race another replica.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ['python', '-m', 'app.migrate']
+    environment:
+      DATABASE_URL: postgresql+psycopg://openbunk:${POSTGRES_PASSWORD:-openbunk-dev-only}@db:5432/openbunk
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    networks: [internal]
+
   api:
     build:
       context: ./backend
@@ -27,11 +43,14 @@ services:
       CORS_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       RATE_LIMIT_PER_MINUTE: '20'
-      # set OPENBUNK_SEED_PIN=1234 only for demo environments; never in production
+      # Demo seed PIN — development/staging only. Leave empty for real stations so
+      # no demo employees are created; production rejects weak/default PINs.
       OPENBUNK_SEED_PIN: ${OPENBUNK_SEED_PIN:-}
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -49,8 +68,9 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         VITE_API_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    # Loopback only: put a TLS-terminating reverse proxy in front for real use.
     ports:
-      - '8080:80'
+      - '127.0.0.1:8080:8080'
     depends_on:
       api:
         condition: service_healthy

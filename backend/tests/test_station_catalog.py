@@ -15,7 +15,7 @@ def test_update_station_requires_owner_and_reauth(client, manager_token, owner_t
     # manager lacks owner role
     response = client.put(
         "/api/v1/station",
-        headers={**auth(manager_token), "X-Reauth-Pin": "1234"},
+        headers={**auth(manager_token), "X-Reauth-Pin": "123456"},
         json={"name": "OpenBunk Test Station"},
     )
     assert response.status_code == 403
@@ -27,7 +27,7 @@ def test_update_station_requires_owner_and_reauth(client, manager_token, owner_t
     # owner with re-auth
     response = client.put(
         "/api/v1/station",
-        headers={**auth(owner_token), "X-Reauth-Pin": "1234"},
+        headers={**auth(owner_token), "X-Reauth-Pin": "123456"},
         json={"name": "OpenBunk Test Station", "business_day_start": "06:00"},
     )
     assert response.status_code == 200

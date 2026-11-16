@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .errors import ApiError
-from .models import Employee, SessionToken, utcnow
+from .models import Employee, ReauthAttempt, SessionToken, utcnow
 from .security import hash_token, verify_pin
 
 ROLES = ("owner", "manager", "cashier", "accountant", "auditor")
@@ -23,6 +23,9 @@ ADMIN_ONLY = ("owner",)
 
 ACCESS_TTL = timedelta(minutes=15)
 REFRESH_TTL = timedelta(hours=12)
+
+REAUTH_MAX_FAILURES = 5
+REAUTH_LOCKOUT = timedelta(minutes=15)
 
 
 def get_db_dep() -> Generator[Session, None, None]:
@@ -42,7 +45,7 @@ def _aware(dt):
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
-def get_current_employee(request: Request, db: Session = Depends(get_db)) -> Employee:
+def get_current_employee(request: Request, db: Session = Depends(get_db_dep)) -> Employee:
     """Access tokens only; refresh tokens cannot call APIs."""
     auth = request.headers.get("authorization", "")
     prefix = "Bearer "
@@ -71,11 +74,65 @@ def require_roles(*roles: str):
     return dependency
 
 
-def require_reauth(request: Request, employee: Employee = Depends(get_current_employee)) -> Employee:
-    """Re-authentication for sensitive actions via X-Reauth-Pin (the caller's PIN)."""
+def require_reauth(
+    request: Request,
+    employee: Employee = Depends(get_current_employee),
+    db: Session = Depends(get_db_dep),
+) -> Employee:
+    """Re-authentication for sensitive actions via X-Reauth-Pin (the caller's PIN).
+
+    Wrong PINs are throttled independently of login: 5 failures lock re-auth for
+    15 minutes and revoke that employee's sessions. Every failure is audited.
+    """
+    attempt = (
+        db.query(ReauthAttempt)
+        .filter(ReauthAttempt.employee_id == employee.id)
+        .first()
+    )
+    locked_until = _aware(attempt.locked_until) if attempt is not None else None
+    if locked_until is not None and locked_until > utcnow():
+        minutes = int((locked_until - utcnow()).total_seconds() // 60) + 1
+        raise ApiError(429, f"Re-authentication locked — try again in ~{minutes} min.")
+
     pin = request.headers.get("x-reauth-pin")
     if not pin or not verify_pin(pin, employee.pin_hash):
-        raise ApiError(401, "Re-authentication required (X-Reauth-Pin)")
+        if attempt is None:
+            attempt = ReauthAttempt(
+                station_id=employee.station_id, employee_id=employee.id, failures=0
+            )
+            db.add(attempt)
+            db.flush()
+        attempt.failures += 1
+        if attempt.failures >= REAUTH_MAX_FAILURES:
+            attempt.locked_until = utcnow() + REAUTH_LOCKOUT
+            db.query(SessionToken).filter(
+                SessionToken.employee_id == employee.id,
+                SessionToken.revoked_at.is_(None),
+            ).update({"revoked_at": utcnow()})
+            audit(
+                db,
+                station_id=employee.station_id,
+                action="reauth.locked",
+                entity_type="employee",
+                entity_id=employee.id,
+                payload={"path": request.url.path, "failures": attempt.failures},
+                actor=employee.id,
+            )
+        audit(
+            db,
+            station_id=employee.station_id,
+            action="reauth.failed",
+            entity_type="employee",
+            entity_id=employee.id,
+            payload={"path": request.url.path, "failures": attempt.failures},
+            actor=employee.id,
+        )
+        db.commit()
+        raise ApiError(401, "Re-authentication failed — wrong PIN")
+
+    if attempt is not None:
+        db.delete(attempt)
+        db.commit()
     return employee
 
 
